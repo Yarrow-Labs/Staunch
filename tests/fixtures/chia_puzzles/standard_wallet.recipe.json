@@ -1,0 +1,8 @@
+{
+  "staunch": 1,
+  "name": "Chia standard wallet (p2_delegated_puzzle_or_hidden_puzzle)",
+  "source": "p2_delegated_puzzle_or_hidden_puzzle.clsp",
+  "include": ["."],
+  "compiler": "clvm_tools_rs 0.4.0",
+  "repo": "https://github.com/Chia-Network/chia_puzzles"
+}

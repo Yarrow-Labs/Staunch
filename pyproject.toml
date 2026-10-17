@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "staunch"
+version = "0.1.0.dev0"
+description = "Check that a Chialisp source is the puzzle on chain"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+dependencies = ["clvm>=0.9.10", "clvm_tools_rs>=0.1.48"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+staunch = "staunch.cli:main"
+
+[project.urls]
+Source = "https://github.com/Yarrow-Labs/Staunch"
+
+[tool.setuptools]
+packages = ["staunch"]
