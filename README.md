@@ -27,8 +27,10 @@ sure what they read is what runs.
 You need Python 3.10 or later and git.
 
 ```sh
+pip install staunch
+
+# the example recipes and coin
 git clone https://github.com/Yarrow-Labs/Staunch && cd Staunch
-pip install -e .                         # from v0.1.0: pip install staunch
 
 # Chia's own puzzle source, at the commit the example recipes name
 git clone https://github.com/Chia-Network/chia_puzzles
@@ -67,11 +69,11 @@ version or a checkout at the wrong commit. It never guesses.
 
 ## Documentation
 
-- [Checking a contract](docs/guide.md): where to get a puzzle, reading the
+- [Checking a contract](https://github.com/Yarrow-Labs/Staunch/blob/main/docs/guide.md): where to get a puzzle, reading the
   report, common refusals and what to do.
-- [Writing a recipe](docs/recipes.md): for projects that want their contracts
+- [Writing a recipe](https://github.com/Yarrow-Labs/Staunch/blob/main/docs/recipes.md): for projects that want their contracts
   verifiable. Every field, with examples.
-- [How it works](docs/how-it-works.md): for auditors. What Staunch checks, what
+- [How it works](https://github.com/Yarrow-Labs/Staunch/blob/main/docs/how-it-works.md): for auditors. What Staunch checks, what
   it trusts, what it cannot tell you, and a map of the code.
 
 ## Why Chia needs a tool for this
@@ -91,8 +93,8 @@ version or a checkout at the wrong commit. It never guesses.
 
 ## Status
 
-Version 0.1. Tested on 115 puzzles from Chia, TibetSwap and warp.green, and on
-live mainnet coins of 32 of them. See [CHANGELOG.md](CHANGELOG.md).
+Version 0.1.0. Tested on 115 puzzles from Chia, TibetSwap and warp.green, and on
+live mainnet coins of 32 of them. See [CHANGELOG.md](https://github.com/Yarrow-Labs/Staunch/blob/main/CHANGELOG.md).
 
 ## Licence
 
@@ -100,4 +102,4 @@ Apache-2.0. `tests/fixtures/chia_puzzles` holds unmodified files from
 [Chia-Network/chia_puzzles](https://github.com/Chia-Network/chia_puzzles),
 also Apache-2.0, and `tests/fixtures/warp_green` unmodified files from
 [warpdotgreen/cli](https://github.com/warpdotgreen/cli), under the MIT licence.
-Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions are welcome: see [CONTRIBUTING.md](https://github.com/Yarrow-Labs/Staunch/blob/main/CONTRIBUTING.md).

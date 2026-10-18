@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "staunch"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Check that a Chialisp contract's published source is the code on chain"
 readme = "README.md"
 license = "Apache-2.0"
@@ -12,6 +12,10 @@ requires-python = ">=3.10"
 dependencies = ["clvm>=0.9.10", "clvm_tools_rs>=0.1.48"]
 keywords = ["chia", "chialisp", "clvm", "verification", "reproducible-builds"]
 classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Topic :: Software Development :: Build Tools",
   "Topic :: Security",
