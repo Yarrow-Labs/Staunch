@@ -20,7 +20,7 @@ def cat_values():
 def test_cat_code_matches_a_real_cat(chia_copy):
     report = verify.verify_puzzle(load(CHIA / "cat_v2.recipe.json"), reveal("cat_std"), TIMES)
     assert report.result == Result.CODE_MATCH
-    assert report.layers[report.layer].name == "CAT2"
+    assert report.layer.name == "CAT2"
 
 
 def test_cat_with_every_value_pinned_is_a_full_match(chia_copy):
@@ -51,7 +51,7 @@ def test_any_slot_is_reported_not_checked(chia_copy):
     values[2] = {"any": True}
     report = verify.verify_puzzle(load(write_recipe(chia_copy, "cat_v2", curry=values)), reveal("cat_std"), TIMES)
     assert report.result == Result.MATCH
-    assert "not pinned" in report.details[2]
+    assert "left open" in report.details[2]
 
 
 def test_control_one_changed_byte_of_source(chia_copy):
@@ -77,13 +77,13 @@ def test_control_one_changed_byte_of_the_puzzle():
 def test_inner_layer_found_through_the_cat():
     report = verify.verify_puzzle(load(CHIA / "standard_wallet.recipe.json"), reveal("cat_std"), TIMES)
     assert report.result == Result.CODE_MATCH
-    assert report.layers[report.layer].name == "standard wallet"
+    assert report.layer.name == "standard wallet"
 
 
 def test_singleton_code_matches_a_real_singleton():
     report = verify.verify_puzzle(load(CHIA / "singleton_v1_1.recipe.json"), reveal("singleton"), TIMES)
     assert report.result == Result.CODE_MATCH
-    assert report.layers[report.layer].name == "singleton v1_1"
+    assert report.layer.name == "singleton v1_1"
 
 
 def test_control_wrong_code_for_the_coin():
@@ -113,6 +113,16 @@ def test_control_hash_with_the_wrong_key(chia_copy):
 def test_hash_of_the_bare_code():
     report = verify.verify_hash(load(CHIA / "cat_v2.recipe.json"), layers.CAT_V2, TIMES)
     assert report.result == Result.CODE_MATCH
+
+
+def test_hash_of_the_bare_code_with_curry_empty_is_a_full_match(chia_copy):
+    r = load(write_recipe(chia_copy, "cat_v2", curry=[]))
+    assert verify.verify_hash(r, layers.CAT_V2, TIMES).result == Result.MATCH
+
+
+def test_control_hash_of_the_bare_code_when_values_are_expected(chia_copy):
+    r = load(write_recipe(chia_copy, "cat_v2", curry=cat_values()))
+    assert verify.verify_hash(r, layers.CAT_V2, TIMES).result == Result.VALUES_DIFFER
 
 
 def test_a_wrapped_hash_cannot_be_unwrapped_and_says_so():
@@ -147,7 +157,7 @@ def test_two_variants_are_reported_and_either_can_match(monkeypatch):
     monkeypatch.setattr(build, "compile_once", lambda source, include: next(outputs))
     report = verify.verify_puzzle(r, reveal("std"), 4)
     assert report.result == Result.CODE_MATCH
-    assert [v.count for v in report.variants] == [3, 1]
+    assert [v.count for v in report.build.variants] == [3, 1]
     assert report.variant == 1
     assert any("unstable" in w for w in report.warnings)
     assert any("variant 2" in w for w in report.warnings)
@@ -205,6 +215,13 @@ def test_without_git_the_commit_is_a_warning(chia_copy, tmp_path):
     ({"curry": [{"int": "5"}]}, "JSON integer"),
     ({"curry": [{"any": False}]}, "any"),
     ({"curry": [{"int": 1, "bytes": "01"}]}, "exactly one key"),
+    ({"curry": [{"bytes": 7}]}, "hex string"),
+    ({"curry": [{"program": "ff01"}]}, "serialized program"),
+    ({"curry": {"int": 1}}, "list of values"),
+    ({"source": "../outside.clsp"}, "outside the checkout"),
+    ({"include": ["/etc"]}, "outside the checkout"),
+    ({"include": "."}, "list of folders"),
+    ({"name": 5}, "must be a string"),
 ])
 def test_recipe_errors(chia_copy, bad, message):
     with pytest.raises(RecipeError, match=message):

@@ -71,3 +71,17 @@ def test_a_refusal_exits_2(tmp_path, capsys):
     bad.write_text(json.dumps({"staunch": 1, "source": "missing.clsp", "compiler": "clvm_tools_rs 0.4.0"}))
     assert main(["verify", str(bad), "--hash", "00" * 32]) == 2
     assert "not found" in capsys.readouterr().err
+
+
+def test_a_puzzle_hash_of_the_wrong_length_is_refused(capsys):
+    assert main(["verify", str(CHIA / "cat_v2.recipe.json"), "--hash", "ab" * 31]) == 2
+    assert "32 bytes" in capsys.readouterr().err
+
+
+def test_the_human_report_reads_clearly(capsys):
+    reveal = json.loads((MAINNET / "cat_std.json").read_text())["puzzle_reveal"]
+    assert main(["verify", str(CHIA / "cat_v2.recipe.json"), "--puzzle", reveal, "-n", str(TIMES)]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("MATCH (code only): Chia CAT v2")
+    assert "Code found at layer 1 of 2: CAT2" in out
+    assert "Build: 4 compiles, one program (stable)" in out

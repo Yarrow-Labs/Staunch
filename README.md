@@ -1,93 +1,99 @@
 # Staunch
 
-Check that a Chialisp source is the puzzle on chain.
+**Check that a Chialisp contract's published source is the code on chain.**
 
-Ethereum users can see a "verified" badge that says a contract's published
-source is the code that runs. Chia has had nothing like it. Staunch rebuilds a
-puzzle from its source and compares it with a coin's puzzle, layer by layer,
-and says one of:
+On Ethereum, a "verified" badge tells you a contract's published source is the
+code that actually runs. Chia has had nothing like it. Staunch fills that gap:
+it rebuilds a puzzle from its source, unwraps the coin you are looking at, and
+tells you whether they are the same, and if not, exactly what differs.
 
-- **MATCH**: this is the recipe's code, with the recipe's curried values;
-- **MATCH (code only)**: the code is the same; the recipe pins no values;
-- **NO MATCH: same code, different curried values**, naming each one that differs;
-- **NO MATCH**: this is not the recipe's code.
-
-It says whether the code is what you were told. It does not say whether the
-code is safe.
-
-## Install
-
-    pip install staunch            # from v0.1.0
-    pip install -e '.[test]'       # from a checkout
-
-Python 3.10 or later. The recipe names a compiler version, and Staunch refuses
-to build with any other: install the one the recipe asks for.
-
-## Use
-
-    staunch build  RECIPE                 # print the mod hash, and every variant if unstable
-    staunch verify RECIPE --puzzle HEX    # a revealed puzzle
-    staunch verify RECIPE --coin ID       # a coin, through a synced full node's `chia rpc`
-    staunch verify RECIPE --hash HASH     # a puzzle hash
-
-Add `--json` for a machine-readable report, `-n` for the number of compiles
-(default 16), and `--strict` to fail when a source compiles more than one way.
-Exit codes: 0 match, 1 no match, 2 refused or error, 3 unstable (with `--strict`).
-
-## The recipe
-
-A project publishes a recipe beside its source:
-
-```json
-{
-  "staunch": 1,
-  "name": "Chia CAT v2",
-  "source": "puzzles/cat_puzzles/cat_v2.clsp",
-  "include": ["puzzles", "puzzles/cat_puzzles"],
-  "compiler": "clvm_tools_rs 0.4.0",
-  "repo": "https://github.com/Chia-Network/chia_puzzles",
-  "commit": "d122456feeef55708d354a065623037bfa010714",
-  "curry": [{"bytes": "37bef360..."}, {"any": true}, {"any": true}]
-}
+```
+$ staunch verify examples/chia_puzzles/cat_v2_one_token.json --root chia_puzzles --puzzle-file examples/cat_coin.hex
+MATCH: Chia CAT v2, one token (asset id db1a9020...)
+  This is the recipe's code, with every value the recipe pins.
+  Code found at layer 1 of 2: CAT2
+  - curried value 0: matches (bytes 37bef360...)
+  - curried value 1: matches (bytes db1a9020...)
+  - curried value 2: a program with tree hash e58b2cfc... (left open by the recipe)
 ```
 
-- Paths start from the checkout root: the recipe's folder, or `--root`.
-- With `commit`, Staunch refuses a checkout at any other commit or with
-  uncommitted changes to the recipe's files.
-- `curry` lists the values curried onto the code. Leave it out to check the
-  code alone. Each value is `{"int": n}`, `{"bytes": "hex"}`,
-  `{"program": "serialized hex"}`, `{"hash": "tree hash"}` (a value known only
-  by its hash), or `{"any": true}` (a slot left open, such as one coin's owner).
-- `precurry` lists values already baked into a published mod. Some projects
-  publish their mod hash that way, and comparing the bare code would always
-  fail.
+Staunch answers **"is this the code I was told?"** It does not answer "is this
+code safe?" Reading the code is still up to you, or your auditor. Staunch makes
+sure what they read is what runs.
 
-## Why Chia needs care
+## Try it in two minutes
 
-- **The code shows only when a coin is spent.** Before that the chain holds
-  only its hash. A hash cannot be unwrapped, so check a wrapped coin through a
-  revealed puzzle from any spend of the same kind, or use the inner hash.
-- **Puzzles come in layers.** Staunch peels Chia's standard layers (CAT2, the
-  singleton v1_1 top layer, the standard wallet) and checks the recipe against
-  each layer. Any other layer is reported as unknown, never guessed.
-- **The compiler is not always deterministic.** `clvm_tools_rs` can compile one
-  source to more than one program. Staunch compiles each source many times,
-  each in a fresh process, and reports every variant it finds.
-- **How you compile matters.** On Chia's own `cat_v2.clsp`, the `run` command
-  gives different bytes from the published puzzle, while `compile_clvm` (what
-  Chia's build uses, and what Staunch uses) reproduces it exactly. `run` also
-  reports a missing include as text with exit code 0.
+You need Python 3.10 or later and git.
 
-## Tests
+```sh
+git clone https://github.com/Yarrow-Labs/Staunch && cd Staunch
+pip install -e .                         # from v0.1.0: pip install staunch
 
-    pytest
+# Chia's own puzzle source, at the commit the example recipes name
+git clone https://github.com/Chia-Network/chia_puzzles
+git -C chia_puzzles checkout 0.20.3
 
-Tests rebuild Chia's standard puzzles from source and check them against
-real mainnet coins (`tests/fixtures`). Every check comes with a control that
-must fail: a changed byte of source, a changed byte of the puzzle, a changed
-curried value, the wrong compiler version, the wrong commit.
+# Is this real mainnet CAT coin running Chia's CAT2 code?
+staunch verify examples/chia_puzzles/cat_v2.json --root chia_puzzles --puzzle-file examples/cat_coin.hex
+```
+
+Then try `cat_v2_one_token.json`, which also checks which token it is.
+
+## What you can check
+
+| You have | Command |
+|---|---|
+| a puzzle revealed in a spend (hex) | `staunch verify RECIPE --puzzle HEX` or `--puzzle-file FILE` |
+| a coin id, and a synced Chia full node | `staunch verify RECIPE --coin COIN_ID` |
+| a puzzle hash only | `staunch verify RECIPE --hash PUZZLE_HASH` |
+| a source you want to publish | `staunch build RECIPE` prints its mod hash |
+
+A **recipe** is a small JSON file that says how to rebuild a puzzle: which file,
+which compiler, which commit, and which values are baked in. Projects publish one
+beside their source.
+
+## The four answers
+
+| Answer | Meaning | Exit code |
+|---|---|---|
+| **MATCH** | The recipe's code, with every value the recipe pins | 0 |
+| **MATCH (code only)** | The recipe's code; the recipe pins no values, so none were checked | 0 |
+| **NO MATCH**, different values | The recipe's code, but a curried value differs; each one is named | 1 |
+| **NO MATCH** | Not the recipe's code | 1 |
+
+Staunch exits 2 when it refuses to run, for example with the wrong compiler
+version or a checkout at the wrong commit. It never guesses.
+
+## Documentation
+
+- [Checking a contract](docs/guide.md): where to get a puzzle, reading the
+  report, common refusals and what to do.
+- [Writing a recipe](docs/recipes.md): for projects that want their contracts
+  verifiable. Every field, with examples.
+- [How it works](docs/how-it-works.md): for auditors. What Staunch checks, what
+  it trusts, what it cannot tell you, and a map of the code.
+
+## Why Chia needs a tool for this
+
+- **The code is only visible after a coin is spent.** Before that, the chain
+  holds just a hash of it.
+- **Puzzles come in layers.** A token in a wallet is the CAT2 layer around a
+  wallet puzzle, and each layer has values baked in. Staunch unwraps Chia's
+  standard layers and checks every one.
+- **The compiler is not always deterministic.** It can turn one source into
+  more than one program. Staunch compiles each source many times and reports
+  every result it gets.
+- **How you call the compiler matters.** The `run` command builds Chia's own
+  CAT2 source into different bytes from the published puzzle. Staunch uses
+  the same compiler function as Chia's build, and reproduces it exactly.
+
+## Status
+
+Version 0.1. It handles the CAT2, singleton v1_1 and standard wallet layers;
+other layers are reported as "unknown". See [CHANGELOG.md](CHANGELOG.md).
 
 ## Licence
 
 Apache-2.0. `tests/fixtures/chia_puzzles` holds unmodified files from
-Chia-Network/chia_puzzles, also Apache-2.0.
+[Chia-Network/chia_puzzles](https://github.com/Chia-Network/chia_puzzles),
+also Apache-2.0. Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).

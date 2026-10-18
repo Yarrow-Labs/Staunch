@@ -29,9 +29,10 @@ def chia_copy(tmp_path):
     return dest
 
 
-def write_recipe(folder: Path, name: str, **changes) -> Path:
-    raw = recipe_json(name)
+def write_recipe(folder: Path, recipe: str, **changes) -> Path:
+    """A copy of fixture recipe `recipe` with `changes`, written to `folder`."""
+    raw = recipe_json(recipe)
     raw.update(changes)
-    path = folder / f"{name}.test.json"
+    path = folder / f"{recipe}.test.json"
     path.write_text(json.dumps(raw))
     return path

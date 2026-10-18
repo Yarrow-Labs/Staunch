@@ -1,0 +1,12 @@
+{
+  "staunch": 1,
+  "name": "Chia CAT v2",
+  "source": "puzzles/cat_puzzles/cat_v2.clsp",
+  "include": [
+    "puzzles",
+    "puzzles/cat_puzzles"
+  ],
+  "compiler": "clvm_tools_rs 0.4.0",
+  "repo": "https://github.com/Chia-Network/chia_puzzles",
+  "commit": "d122456feeef55708d354a065623037bfa010714"
+}

@@ -32,7 +32,13 @@ def _rpc(chia: str, command: str, args: dict) -> dict:
 
 
 def coin(coin_id: str, chia: str = "chia") -> tuple[SExp | None, bytes]:
-    """(revealed puzzle or None if unspent, puzzle hash)."""
+    """(the revealed puzzle, or None if the coin is unspent; its puzzle hash).
+
+    The node is not trusted: a reveal that does not hash to the coin's puzzle
+    hash is refused.
+    """
+    if len(bytes.fromhex(coin_id.removeprefix("0x"))) != 32:
+        raise FetchError("a coin id is 32 bytes (64 hex digits)")
     coin_id = "0x" + coin_id.removeprefix("0x")
     record = _rpc(chia, "get_coin_record_by_name", {"name": coin_id})["coin_record"]
     puzzle_hash = bytes.fromhex(record["coin"]["puzzle_hash"].removeprefix("0x"))

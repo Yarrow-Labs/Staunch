@@ -1,0 +1,23 @@
+{
+  "staunch": 1,
+  "name": "Chia CAT v2, one token (asset id db1a9020...)",
+  "source": "puzzles/cat_puzzles/cat_v2.clsp",
+  "include": [
+    "puzzles",
+    "puzzles/cat_puzzles"
+  ],
+  "compiler": "clvm_tools_rs 0.4.0",
+  "repo": "https://github.com/Chia-Network/chia_puzzles",
+  "commit": "d122456feeef55708d354a065623037bfa010714",
+  "curry": [
+    {
+      "bytes": "37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb7c1d2a7a"
+    },
+    {
+      "bytes": "db1a9020d48d9d4ad22631b66ab4b9ebd3637ef7758ad38881348c5d24c38f20"
+    },
+    {
+      "any": true
+    }
+  ]
+}

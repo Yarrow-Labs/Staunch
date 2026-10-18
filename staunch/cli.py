@@ -1,10 +1,13 @@
-"""staunch: check that a Chialisp source is the puzzle on chain.
+"""The `staunch` command.
 
-    staunch build  RECIPE [-n 16]
-    staunch verify RECIPE (--puzzle HEX | --puzzle-file FILE | --coin ID | --hash HASH)
+    staunch build  RECIPE                      rebuild; print the mod hash of each variant
+    staunch verify RECIPE --puzzle HEX         check a revealed puzzle
+    staunch verify RECIPE --puzzle-file FILE   ... read from a file
+    staunch verify RECIPE --coin COIN_ID       check a coin, through a full node
+    staunch verify RECIPE --hash PUZZLE_HASH   check a bare puzzle hash
 
-Exit codes: 0 match, 1 no match or values differ, 2 refused or error,
-3 match but the source compiles to more than one program (with --strict).
+Exit codes: 0 match · 1 no match · 2 refused or error · 3 match, but the
+source compiles more than one way (only with --strict).
 """
 from __future__ import annotations
 
@@ -15,87 +18,112 @@ from pathlib import Path
 
 from . import __version__, build, fetch, program
 from .recipe import RecipeError, load
-from .verify import Result, rebuild, verify_hash, verify_puzzle
+from .verify import Report, Result, rebuild, verify_hash, verify_puzzle
 
-VERDICT = {
-    Result.MATCH: "MATCH: this is the recipe's code, with the recipe's values",
-    Result.CODE_MATCH: "MATCH (code only): this is the recipe's code; no curried values were pinned",
-    Result.VALUES_DIFFER: "NO MATCH: same code, different curried values",
-    Result.NO_MATCH: "NO MATCH: this is not the recipe's code",
+EXIT_MATCH, EXIT_NO_MATCH, EXIT_REFUSED, EXIT_UNSTABLE = 0, 1, 2, 3
+
+HEADLINE = {
+    Result.MATCH: ("MATCH", "This is the recipe's code, with every value the recipe pins."),
+    Result.CODE_MATCH: ("MATCH (code only)", "This is the recipe's code. The recipe pins no curried values, so none were checked."),
+    Result.VALUES_DIFFER: ("NO MATCH", "This is the recipe's code, but with different curried values."),
+    Result.NO_MATCH: ("NO MATCH", "This is not the recipe's code."),
 }
 
 
-def _print_report(report, as_json: bool) -> None:
-    if as_json:
-        print(json.dumps(report.as_dict(), indent=2))
-        return
-    d = report.as_dict()
-    print(f"{VERDICT[report.result]}\n  recipe: {d['recipe']}")
-    if d["layer"]:
-        print(f"  found at layer: {d['layer']}")
-    for line in d["details"]:
-        print(f"  {line}")
-    if d["layers"]:
-        print("  layers, outermost first:")
-        for l in d["layers"]:
-            extra = "".join(f"; {k} {v}" for k, v in l.items() if k not in ("name", "hash"))
-            print(f"    {l['name']}: {l['hash']}{extra}")
-    for w in d["warnings"]:
-        print(f"  warning: {w}")
+def print_report(report: Report) -> None:
+    title, meaning = HEADLINE[report.result]
+    print(f"{title}: {report.recipe}\n  {meaning}")
+    if report.layer:
+        number = next(n for n, layer in enumerate(report.layers, 1) if layer is report.layer)
+        print(f"  Code found at layer {number} of {len(report.layers)}: {report.layer.name}")
+    for line in report.details:
+        print(f"  - {line}")
+    if report.layers:
+        print("\nLayers, outermost first:")
+        for n, layer in enumerate(report.layers, 1):
+            print(f"  {n}. {layer.name}, puzzle hash {layer.hash.hex()}")
+            for key, value in layer.facts.items():
+                print(f"       {key}: {value}")
+    built = report.build
+    print(f"\nBuild: {built.compiles} compiles, "
+          + ("one program (stable)" if len(built.variants) == 1 else f"{len(built.variants)} different programs"))
+    for n, (mod_hash, variant) in enumerate(zip(built.mod_hashes, built.variants), 1):
+        print(f"  variant {n}: mod hash {mod_hash.hex()} ({variant.count} of {built.compiles})")
+    for warning in report.warnings:
+        print(f"\nWarning: {warning}")
 
 
-def _cmd_build(args) -> int:
-    recipe = load(args.recipe, args.root)
-    variants, mods, warnings = rebuild(recipe, args.n)
-    for h, v in zip(mods, variants):
-        print(f"{h.hex()}  {v.count}/{args.n} compiles, {len(v.program)} bytes")
-    for w in warnings:
-        print(f"warning: {w}")
-    return 3 if args.strict and len(variants) > 1 else 0
+def _parse_hash(text: str) -> bytes:
+    blob = bytes.fromhex(text.removeprefix("0x"))
+    if len(blob) != 32:
+        raise ValueError(f"a puzzle hash is 32 bytes (64 hex digits); this is {len(blob)}")
+    return blob
 
 
-def _cmd_verify(args) -> int:
+def cmd_build(args) -> int:
+    built = rebuild(load(args.recipe, args.root), args.n)
+    for mod_hash, variant in zip(built.mod_hashes, built.variants):
+        print(f"{mod_hash.hex()}  {variant.count} of {args.n} compiles, {len(variant.program)} bytes")
+    for warning in built.warnings:
+        print(f"Warning: {warning}", file=sys.stderr)
+    return EXIT_UNSTABLE if args.strict and len(built.variants) > 1 else EXIT_MATCH
+
+
+def cmd_verify(args) -> int:
     recipe = load(args.recipe, args.root)
     if args.coin:
         puzzle, puzzle_hash = fetch.coin(args.coin, args.chia)
-        report = verify_puzzle(recipe, puzzle, args.n) if puzzle is not None else verify_hash(recipe, puzzle_hash, args.n)
         if puzzle is None:
+            report = verify_hash(recipe, puzzle_hash, args.n)
             report.warnings.append("the coin is unspent, so only its puzzle hash is public")
+        else:
+            report = verify_puzzle(recipe, puzzle, args.n)
     elif args.hash:
-        report = verify_hash(recipe, bytes.fromhex(args.hash.removeprefix("0x")), args.n)
+        report = verify_hash(recipe, _parse_hash(args.hash), args.n)
     else:
         text = Path(args.puzzle_file).read_text() if args.puzzle_file else args.puzzle
         report = verify_puzzle(recipe, program.from_hex(text), args.n)
-    _print_report(report, args.json)
+
+    if args.json:
+        print(json.dumps(report.as_dict(), indent=2))
+    else:
+        print_report(report)
     if not report.result.ok:
-        return 1
-    return 3 if args.strict and len(report.variants) > 1 else 0
+        return EXIT_NO_MATCH
+    return EXIT_UNSTABLE if args.strict and len(report.build.variants) > 1 else EXIT_MATCH
+
+
+def parser() -> argparse.ArgumentParser:
+    top = argparse.ArgumentParser(prog="staunch", description="Check that a Chialisp source is the puzzle on chain.")
+    top.add_argument("--version", action="version", version=f"staunch {__version__}")
+    commands = top.add_subparsers(dest="command", required=True)
+
+    def common(p):
+        p.add_argument("recipe", help="the recipe file (JSON)")
+        p.add_argument("--root", help="the checkout the recipe's paths start from (default: the recipe's folder)")
+        p.add_argument("-n", type=int, default=16, metavar="N", help="compiles per check (default 16)")
+        p.add_argument("--strict", action="store_true", help="exit 3 if the source compiles more than one way")
+
+    common(commands.add_parser("build", help="rebuild a recipe and print its mod hash"))
+    v = commands.add_parser("verify", help="check a recipe against a puzzle, coin or hash")
+    common(v)
+    target = v.add_mutually_exclusive_group(required=True)
+    target.add_argument("--puzzle", metavar="HEX", help="a revealed puzzle, serialized, in hex")
+    target.add_argument("--puzzle-file", metavar="FILE", help="a file holding a revealed puzzle in hex")
+    target.add_argument("--coin", metavar="COIN_ID", help="a coin id (needs a synced full node and the chia command)")
+    target.add_argument("--hash", metavar="PUZZLE_HASH", help="a puzzle hash")
+    v.add_argument("--chia", default="chia", metavar="PATH", help="the chia command to use with --coin (default: chia)")
+    v.add_argument("--json", action="store_true", help="print the report as JSON")
+    return top
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="staunch", description=__doc__.split("\n")[0])
-    parser.add_argument("--version", action="version", version=f"staunch {__version__}")
-    sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("build", "verify"):
-        p = sub.add_parser(name)
-        p.add_argument("recipe")
-        p.add_argument("--root", help="checkout root the recipe's paths start from (default: the recipe's folder)")
-        p.add_argument("-n", type=int, default=16, help="compiles per check (default 16)")
-        p.add_argument("--strict", action="store_true", help="exit 3 if the source compiles more than one way")
-        if name == "verify":
-            target = p.add_mutually_exclusive_group(required=True)
-            target.add_argument("--puzzle", help="a revealed puzzle, serialized, in hex")
-            target.add_argument("--puzzle-file", help="a file holding a revealed puzzle in hex")
-            target.add_argument("--coin", help="a coin id; needs a synced full node and the chia command")
-            target.add_argument("--hash", help="a puzzle hash")
-            p.add_argument("--chia", default="chia", help="path to the chia command (for --coin)")
-            p.add_argument("--json", action="store_true")
-    args = parser.parse_args(argv)
+    args = parser().parse_args(argv)
     try:
-        return _cmd_build(args) if args.command == "build" else _cmd_verify(args)
-    except (RecipeError, build.BuildError, fetch.FetchError, ValueError) as e:
-        print(f"refused: {e}", file=sys.stderr)
-        return 2
+        return cmd_build(args) if args.command == "build" else cmd_verify(args)
+    except (RecipeError, build.BuildError, fetch.FetchError, ValueError, OSError) as e:
+        print(f"Refused: {e}", file=sys.stderr)
+        return EXIT_REFUSED
 
 
 if __name__ == "__main__":

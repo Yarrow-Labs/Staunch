@@ -2,7 +2,6 @@ import pytest
 from clvm import SExp
 
 from staunch import program
-from staunch.layers import CAT_V2
 
 
 def test_int_atom_is_the_shortest_spelling():
@@ -53,6 +52,11 @@ def test_uncurry_takes_off_one_curry_only():
     SExp.to([b"\x02", (b"\x01", b"\x05"), b"\x01", b"\x01"]),         # trailing item
     SExp.to([b"\x02", (b"\x01", b"\x05"), [b"\x04", b"\x07", b"\x01"]]),  # argument not quoted
     SExp.to([b"\x03", (b"\x01", b"\x05"), b"\x01"]),                 # not an apply
+    SExp.to((b"\x02", ((b"\x01", b"\x05"), (b"\x01", b"\x09")))),     # junk where the list should end
+    SExp.to([b"\x02", (b"\x01", b"\x05"),
+             (b"\x04", ((b"\x01", b"\x07"), (b"\x01", b"\x09")))]),  # a link ends in junk
+    SExp.to([b"\x02", (b"\x01", b"\x05"),
+             [b"\x04", (b"\x01", b"\x07"), b"\x01", b"\x01"]]),      # a link has four items
 ])
 def test_uncurry_refuses_anything_else(not_curried):
     assert program.uncurry(not_curried) is None
@@ -63,7 +67,3 @@ def test_from_bytes_refuses_trailing_bytes():
     assert program.tree_hash(program.from_bytes(blob)) == program.tree_hash(SExp.to([1, 2]))
     with pytest.raises(ValueError):
         program.from_bytes(blob + b"\x80")
-
-
-def test_layer_constants_are_32_bytes():
-    assert len(CAT_V2) == 32

@@ -1,7 +1,16 @@
-"""CLVM trees: parse, hash, and take curried programs apart.
+"""CLVM values: parse them, hash them, and take curried programs apart.
 
-Kept small on purpose: everything Staunch concludes rests on these few
-functions, so they are written to be read and checked by hand.
+Everything Staunch concludes rests on the functions in this file, so they are
+kept short enough to check by hand against Chia's definitions:
+
+- A puzzle hash is the *tree hash* of the program:
+  an atom hashes as sha256(0x01 + atom), a pair as sha256(0x02 + left + right).
+- *Currying* bakes values into a program. Curried, MOD with values A and B is
+
+      (a (q . MOD) (c (q . A) (c (q . B) 1)))
+
+  that is: "apply MOD to an environment that starts with A, then B, then the
+  caller's solution".
 """
 from __future__ import annotations
 
@@ -9,15 +18,20 @@ import hashlib
 import io
 
 from clvm import SExp
-from clvm.EvalError import EvalError
 from clvm.serialize import sexp_from_stream, sexp_to_stream
 
-OP_QUOTE = b"\x01"
-OP_APPLY = b"\x02"
-OP_CONS = b"\x04"
+# The three CLVM operators that make up a curried program.
+OP_QUOTE = b"\x01"   # q
+OP_APPLY = b"\x02"   # a
+OP_CONS = b"\x04"    # c
+NIL = b""
+SOLUTION = b"\x01"   # in an environment, atom 1 stands for "the whole solution"
 
+
+# --- reading and writing ------------------------------------------------------
 
 def from_bytes(blob: bytes) -> SExp:
+    """Parse a serialized CLVM value. Refuses trailing bytes."""
     stream = io.BytesIO(blob)
     sexp = sexp_from_stream(stream, SExp.to)
     if stream.read(1):
@@ -26,6 +40,7 @@ def from_bytes(blob: bytes) -> SExp:
 
 
 def from_hex(text: str) -> SExp:
+    """Parse a serialized CLVM value written in hex, with or without 0x."""
     return from_bytes(bytes.fromhex(text.strip().removeprefix("0x")))
 
 
@@ -34,6 +49,18 @@ def to_bytes(sexp: SExp) -> bytes:
     sexp_to_stream(sexp, stream)
     return stream.getvalue()
 
+
+def int_atom(value: int) -> bytes:
+    """The atom CLVM uses for an integer: shortest big-endian two's complement."""
+    if value == 0:
+        return NIL
+    # Bits needed for the magnitude, plus one for the sign. For a negative
+    # number, ~value (= -value - 1) gives the magnitude two's complement needs.
+    magnitude_bits = (value if value > 0 else ~value).bit_length()
+    return value.to_bytes(magnitude_bits // 8 + 1, "big", signed=True)
+
+
+# --- hashing -------------------------------------------------------------------
 
 def atom_hash(atom: bytes) -> bytes:
     return hashlib.sha256(b"\x01" + atom).digest()
@@ -44,85 +71,94 @@ def pair_hash(left: bytes, right: bytes) -> bytes:
 
 
 def tree_hash(sexp: SExp) -> bytes:
-    """Chia's puzzle hash. Iterative, so a deep tree cannot exhaust the stack."""
-    work, done = [sexp], []
-    while work:
-        node = work.pop()
-        if node is None:
-            right, left = done.pop(), done.pop()
-            done.append(pair_hash(left, right))
+    """Chia's puzzle hash of a value.
+
+    Walks the tree with an explicit stack rather than recursion, so a deeply
+    nested program from the chain cannot crash it.
+    """
+    to_visit, hashes = [sexp], []
+    while to_visit:
+        node = to_visit.pop()
+        if node is None:                       # both children of a pair are hashed
+            right, left = hashes.pop(), hashes.pop()
+            hashes.append(pair_hash(left, right))
         elif node.listp():
-            work.extend((None, node.rest(), node.first()))
+            to_visit.extend((None, node.rest(), node.first()))
         else:
-            done.append(atom_hash(node.as_atom()))
-    return done[0]
+            hashes.append(atom_hash(node.as_atom()))
+    return hashes[0]
 
 
-def int_atom(value: int) -> bytes:
-    """CLVM's shortest two's-complement spelling of an integer."""
-    if value == 0:
-        return b""
-    size = (value.bit_length() + 8) // 8
-    blob = value.to_bytes(size, "big", signed=True)
-    while len(blob) > 1 and blob[0] == (0xFF if blob[1] & 0x80 else 0x00):
-        blob = blob[1:]
-    return blob
+# --- currying ------------------------------------------------------------------
+
+def curry(mod: SExp, values: list[SExp]) -> SExp:
+    """MOD with `values` curried in, built exactly as Chia builds it."""
+    env = SExp.to(SOLUTION)
+    for value in reversed(values):
+        env = SExp.to([OP_CONS, SExp.to((OP_QUOTE, value)), env])
+    return SExp.to([OP_APPLY, SExp.to((OP_QUOTE, mod)), env])
 
 
-def _quoted(sexp: SExp) -> SExp | None:
+def curried_hash(mod_hash: bytes, value_hashes: list[bytes]) -> bytes:
+    """The tree hash `curry` would give, computed from hashes alone.
+
+    This is what lets a recipe name a curried value by its hash only: the
+    result is the same as hashing the full program.
+    """
+    q, a, c, nil = atom_hash(OP_QUOTE), atom_hash(OP_APPLY), atom_hash(OP_CONS), atom_hash(NIL)
+
+    def three_item_list(first: bytes, second: bytes, third: bytes) -> bytes:
+        return pair_hash(first, pair_hash(second, pair_hash(third, nil)))
+
+    env = atom_hash(SOLUTION)
+    for value in reversed(value_hashes):
+        env = three_item_list(c, pair_hash(q, value), env)
+    return three_item_list(a, pair_hash(q, mod_hash), env)
+
+
+def _atom_is(sexp: SExp, atom: bytes) -> bool:
+    return not sexp.listp() and sexp.as_atom() == atom
+
+
+def _three_items(sexp: SExp) -> tuple[SExp, SExp, SExp] | None:
+    """(x y z) if `sexp` is exactly a three-item list, else None."""
+    items = []
+    while sexp.listp() and len(items) < 4:
+        items.append(sexp.first())
+        sexp = sexp.rest()
+    if len(items) == 3 and _atom_is(sexp, NIL):
+        return items[0], items[1], items[2]
+    return None
+
+
+def _unquote(sexp: SExp) -> SExp | None:
     """X if `sexp` is (q . X), else None."""
-    if sexp.listp() and not sexp.first().listp() and sexp.first().as_atom() == OP_QUOTE:
+    if sexp.listp() and _atom_is(sexp.first(), OP_QUOTE):
         return sexp.rest()
     return None
 
 
 def uncurry(sexp: SExp) -> tuple[SExp, list[SExp]] | None:
-    """(mod, args) if `sexp` is a curried program, else None.
+    """(MOD, values) if `sexp` is exactly what `curry` builds, else None.
 
-    A curried program is (a (q . MOD) ENV) with ENV built as
-    (c (q . ARG1) (c (q . ARG2) ... 1)). Only the outermost curry is taken
-    off: a program curried twice comes back as (once-curried mod, args).
+    Strict on purpose: anything that is not the standard shape, down to the
+    last terminator, is not treated as curried. Only the outermost curry is
+    removed, so a program curried twice comes back as (once-curried MOD, values).
     """
-    try:
-        op, rest = sexp.first(), sexp.rest()
-        if op.listp() or op.as_atom() != OP_APPLY:
-            return None
-        mod = _quoted(rest.first())
-        env, end = rest.rest().first(), rest.rest().rest()
-        if mod is None or end.listp() or end.as_atom() != b"":
-            return None
-        args = []
-        while env.listp():
-            cons, quoted_arg, tail = env.first(), env.rest().first(), env.rest().rest().first()
-            if cons.listp() or cons.as_atom() != OP_CONS or env.rest().rest().rest().listp():
-                return None
-            arg = _quoted(quoted_arg)
-            if arg is None:
-                return None
-            args.append(arg)
-            env = tail
-        if env.as_atom() != b"\x01":
-            return None
-        return mod, args
-    except (EvalError, EOFError, ValueError, AttributeError):
+    outer = _three_items(sexp)
+    if outer is None or not _atom_is(outer[0], OP_APPLY):
         return None
-
-
-def curried_hash(mod_hash: bytes, arg_hashes: list[bytes]) -> bytes:
-    """Tree hash of `mod` curried with args, from hashes alone.
-
-    Lets a recipe name a curried value by its hash, so a project can publish
-    "this slot holds the puzzle with hash H" without revealing the puzzle.
-    """
-    q, a, c, one = (atom_hash(x) for x in (OP_QUOTE, OP_APPLY, OP_CONS, b"\x01"))
-    env = one
-    for arg in reversed(arg_hashes):
-        env = pair_hash(c, pair_hash(pair_hash(q, arg), pair_hash(env, atom_hash(b""))))
-    return pair_hash(a, pair_hash(pair_hash(q, mod_hash), pair_hash(env, atom_hash(b""))))
-
-
-def curry(mod: SExp, args: list[SExp]) -> SExp:
-    env = SExp.to(1)
-    for arg in reversed(args):
-        env = SExp.to([OP_CONS, SExp.to((OP_QUOTE, arg)), env])
-    return SExp.to([OP_APPLY, SExp.to((OP_QUOTE, mod)), env])
+    mod = _unquote(outer[1])
+    if mod is None:
+        return None
+    values, env = [], outer[2]
+    while not _atom_is(env, SOLUTION):
+        link = _three_items(env)
+        if link is None or not _atom_is(link[0], OP_CONS):
+            return None
+        value = _unquote(link[1])
+        if value is None:
+            return None
+        values.append(value)
+        env = link[2]
+    return mod, values

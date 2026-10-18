@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "staunch"
 version = "0.1.0.dev0"
-description = "Check that a Chialisp source is the puzzle on chain"
+description = "Check that a Chialisp contract's published source is the code on chain"
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
@@ -17,8 +17,17 @@ test = ["pytest>=8"]
 [project.scripts]
 staunch = "staunch.cli:main"
 
+keywords = ["chia", "chialisp", "clvm", "verification", "reproducible-builds"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Build Tools",
+  "Topic :: Security",
+]
+
 [project.urls]
 Source = "https://github.com/Yarrow-Labs/Staunch"
+Documentation = "https://github.com/Yarrow-Labs/Staunch/tree/main/docs"
+Changelog = "https://github.com/Yarrow-Labs/Staunch/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 packages = ["staunch"]
