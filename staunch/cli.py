@@ -94,7 +94,7 @@ def cmd_verify(args) -> int:
 
 
 def parser() -> argparse.ArgumentParser:
-    top = argparse.ArgumentParser(prog="staunch", description="Check that a Chialisp source is the puzzle on chain.")
+    top = argparse.ArgumentParser(prog="staunch", description="Check that a Chialisp contract's published source is the code on chain.")
     top.add_argument("--version", action="version", version=f"staunch {__version__}")
     commands = top.add_subparsers(dest="command", required=True)
 

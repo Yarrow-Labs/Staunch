@@ -30,3 +30,6 @@ Changelog = "https://github.com/Yarrow-Labs/Staunch/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 packages = ["staunch"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
