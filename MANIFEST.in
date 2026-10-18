@@ -1,0 +1,6 @@
+# The source archive carries everything needed to run the tests and read the docs.
+include CHANGELOG.md CONTRIBUTING.md
+recursive-include docs *.md
+recursive-include examples *.json *.hex
+recursive-include tests *.py *.json *.md *.clsp *.clib *.hex LICENSE
+global-exclude __pycache__ *.py[cod]
