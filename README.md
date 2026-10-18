@@ -4,14 +4,15 @@
 
 On Ethereum, a "verified" badge tells you a contract's published source is the
 code that actually runs. Chia has had nothing like it. Staunch fills that gap:
-it rebuilds a puzzle from its source, unwraps the coin you are looking at, and
-tells you whether they are the same, and if not, exactly what differs.
+it rebuilds a puzzle from its source, searches the coin you are looking at for
+that code, at any depth inside its wrappers, and tells you whether it is there,
+with the right values, and if not, exactly what differs.
 
 ```
 $ staunch verify examples/chia_puzzles/cat_v2_one_token.json --root chia_puzzles --puzzle-file examples/cat_coin.hex
 MATCH: Chia CAT v2, one token (asset id db1a9020...)
   This is the recipe's code, with every value the recipe pins.
-  Code found at layer 1 of 2: CAT2
+  Code found in: the whole puzzle
   - curried value 0: matches (bytes 37bef360...)
   - curried value 1: matches (bytes db1a9020...)
   - curried value 2: a program with tree hash e58b2cfc... (left open by the recipe)
@@ -59,7 +60,7 @@ beside their source.
 | **MATCH** | The recipe's code, with every value the recipe pins | 0 |
 | **MATCH (code only)** | The recipe's code; the recipe pins no values, so none were checked | 0 |
 | **NO MATCH**, different values | The recipe's code, but a curried value differs; each one is named | 1 |
-| **NO MATCH** | Not the recipe's code | 1 |
+| **NO MATCH** | The recipe's code is nowhere in the puzzle | 1 |
 
 Staunch exits 2 when it refuses to run, for example with the wrong compiler
 version or a checkout at the wrong commit. It never guesses.
@@ -77,9 +78,9 @@ version or a checkout at the wrong commit. It never guesses.
 
 - **The code is only visible after a coin is spent.** Before that, the chain
   holds just a hash of it.
-- **Puzzles come in layers.** A token in a wallet is the CAT2 layer around a
-  wallet puzzle, and each layer has values baked in. Staunch unwraps Chia's
-  standard layers and checks every one.
+- **Puzzles come in layers.** An NFT is a singleton around a state layer around
+  an ownership layer around a royalty program, each with values baked in.
+  Staunch searches every layer, including wrappers it has never seen.
 - **The compiler is not always deterministic.** It can turn one source into
   more than one program. Staunch compiles each source many times and reports
   every result it gets.
@@ -89,8 +90,8 @@ version or a checkout at the wrong commit. It never guesses.
 
 ## Status
 
-Version 0.1. It handles the CAT2, singleton v1_1 and standard wallet layers;
-other layers are reported as "unknown". See [CHANGELOG.md](CHANGELOG.md).
+Version 0.1. Tested on 115 puzzles from Chia, TibetSwap and warp.green, and on
+live mainnet coins of 23 of them. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Licence
 

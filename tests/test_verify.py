@@ -20,7 +20,7 @@ def cat_values():
 def test_cat_code_matches_a_real_cat(chia_copy):
     report = verify.verify_puzzle(load(CHIA / "cat_v2.recipe.json"), reveal("cat_std"), TIMES)
     assert report.result == Result.CODE_MATCH
-    assert report.layer.name == "CAT2"
+    assert report.location == []          # the CAT2 code is the whole puzzle
 
 
 def test_cat_with_every_value_pinned_is_a_full_match(chia_copy):
@@ -77,18 +77,73 @@ def test_control_one_changed_byte_of_the_puzzle():
 def test_inner_layer_found_through_the_cat():
     report = verify.verify_puzzle(load(CHIA / "standard_wallet.recipe.json"), reveal("cat_std"), TIMES)
     assert report.result == Result.CODE_MATCH
-    assert report.layer.name == "standard wallet"
+    assert report.location == ["CAT2, curried value 2"]
 
 
 def test_singleton_code_matches_a_real_singleton():
     report = verify.verify_puzzle(load(CHIA / "singleton_v1_1.recipe.json"), reveal("singleton"), TIMES)
     assert report.result == Result.CODE_MATCH
-    assert report.layer.name == "singleton v1_1"
+    assert report.location == []
 
 
 def test_control_wrong_code_for_the_coin():
     report = verify.verify_puzzle(load(CHIA / "cat_v2.recipe.json"), reveal("std"), TIMES)
     assert report.result == Result.NO_MATCH
+    assert "not anywhere in this puzzle" in report.details[-1]
+
+
+# --- searching inside wrappers ------------------------------------------------
+
+def test_nft_state_layer_found_inside_the_singleton():
+    report = verify.verify_puzzle(load(CHIA / "nft_state_layer.recipe.json"), reveal("nft"), TIMES)
+    assert report.result == Result.CODE_MATCH
+    assert report.location == ["singleton v1_1, curried value 1"]
+
+
+def test_nft_ownership_layer_found_two_wrappers_down():
+    report = verify.verify_puzzle(load(CHIA / "nft_ownership_layer.recipe.json"), reveal("nft"), TIMES)
+    assert report.result == Result.CODE_MATCH
+    assert report.location == ["singleton v1_1, curried value 1", "NFT state layer, curried value 3"]
+
+
+def test_plot_nft_found_inside_the_older_singleton():
+    report = verify.verify_puzzle(load(CHIA / "pool_member.recipe.json"), reveal("plot_nft"), TIMES)
+    assert report.result == Result.CODE_MATCH
+    assert report.location == ["singleton v1 (older), curried value 1"]
+
+
+def test_control_code_not_in_the_nft():
+    report = verify.verify_puzzle(load(CHIA / "pool_member.recipe.json"), reveal("nft"), TIMES)
+    assert report.result == Result.NO_MATCH
+
+
+def wallet(key: bytes) -> SExp:
+    r = load(CHIA / "standard_wallet.recipe.json")
+    return program.curry(program.from_bytes(build.compile_once(r.source, r.include)), [SExp.to(key)])
+
+
+def test_the_shallowest_of_equal_matches_is_reported():
+    holder = SExp.to([b"\x01", b"\x09"])           # any program; not a known puzzle
+    puzzle = program.curry(holder, [wallet(b"\xaa" * 48), program.curry(holder, [wallet(b"\xbb" * 48)])])
+    report = verify.verify_puzzle(load(CHIA / "standard_wallet.recipe.json"), puzzle, TIMES)
+    assert report.result == Result.CODE_MATCH
+    assert len(report.location) == 1 and report.location[0].endswith("curried value 0")
+
+
+def test_a_deeper_full_match_beats_a_shallower_partial_one(chia_copy):
+    holder = SExp.to([b"\x01", b"\x09"])
+    puzzle = program.curry(holder, [wallet(b"\xaa" * 48), program.curry(holder, [wallet(b"\xbb" * 48)])])
+    r = load(write_recipe(chia_copy, "standard_wallet", curry=[{"bytes": "bb" * 48}]))
+    report = verify.verify_puzzle(r, puzzle, TIMES)
+    assert report.result == Result.MATCH
+    assert len(report.location) == 2
+
+
+def test_the_search_is_bounded(monkeypatch):
+    monkeypatch.setattr(verify, "MAX_PLACES", 1)
+    report = verify.verify_puzzle(load(CHIA / "nft_ownership_layer.recipe.json"), reveal("nft"), TIMES)
+    assert report.result == Result.NO_MATCH
+    assert any("search stopped" in w for w in report.warnings)
 
 
 # --- by hash ---------------------------------------------------------------

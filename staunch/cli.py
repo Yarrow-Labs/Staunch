@@ -26,20 +26,19 @@ HEADLINE = {
     Result.MATCH: ("MATCH", "This is the recipe's code, with every value the recipe pins."),
     Result.CODE_MATCH: ("MATCH (code only)", "This is the recipe's code. The recipe pins no curried values, so none were checked."),
     Result.VALUES_DIFFER: ("NO MATCH", "This is the recipe's code, but with different curried values."),
-    Result.NO_MATCH: ("NO MATCH", "This is not the recipe's code."),
+    Result.NO_MATCH: ("NO MATCH", "The recipe's code is not anywhere in this puzzle."),
 }
 
 
 def print_report(report: Report) -> None:
     title, meaning = HEADLINE[report.result]
     print(f"{title}: {report.recipe}\n  {meaning}")
-    if report.layer:
-        number = next(n for n, layer in enumerate(report.layers, 1) if layer is report.layer)
-        print(f"  Code found at layer {number} of {len(report.layers)}: {report.layer.name}")
+    if report.location is not None:
+        print("  Code found in: " + (" > ".join(report.location) or "the whole puzzle"))
     for line in report.details:
         print(f"  - {line}")
     if report.layers:
-        print("\nLayers, outermost first:")
+        print("\nStandard layers, outermost first:")
         for n, layer in enumerate(report.layers, 1):
             print(f"  {n}. {layer.name}, puzzle hash {layer.hash.hex()}")
             for key, value in layer.facts.items():

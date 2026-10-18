@@ -21,7 +21,7 @@ explorer, an auditor.
 ## 2. Getting something to check
 
 **A coin that has been spent** has revealed its whole puzzle on chain. That is
-the best thing to check, because Staunch can unwrap it layer by layer.
+the best thing to check, because Staunch can search all of it.
 
 - *With a full node:* `staunch verify RECIPE --coin COIN_ID`. Staunch asks your
   node through `chia rpc` (use `--chia PATH` if `chia` is not on your PATH).
@@ -49,12 +49,12 @@ A hash cannot be unwrapped, so this works only when:
 ```
 MATCH: Chia CAT v2, one token (asset id db1a9020...)
   This is the recipe's code, with every value the recipe pins.
-  Code found at layer 1 of 2: CAT2
+  Code found in: the whole puzzle
   - curried value 0: matches (bytes 37bef360...)
   - curried value 1: matches (bytes db1a9020...)
   - curried value 2: a program with tree hash e58b2cfc... (left open by the recipe)
 
-Layers, outermost first:
+Standard layers, outermost first:
   1. CAT2, puzzle hash a11df965...
        asset id (TAIL hash): db1a9020...
   2. standard wallet, puzzle hash e58b2cfc...
@@ -65,13 +65,18 @@ Build: 16 compiles, one program (stable)
 ```
 
 - **The first line is the answer.** See the table below.
-- **"Code found at layer"** says which layer of the coin is the recipe's code.
-  A recipe for a wallet puzzle can be found inside a CAT, for example.
+- **"Code found in"** says where in the coin the recipe's code is. For an NFT's
+  ownership layer it reads `singleton v1_1, curried value 1 > NFT state layer,
+  curried value 3`: inside the singleton's value 1, then inside the state
+  layer's value 3. Staunch searches every program curried into the coin, so it
+  finds the code inside wrappers it has never heard of; those are shown by mod
+  hash.
 - **Curried values** are values baked into the code, such as a token's asset id
   or an owner's key. Each one the recipe pins is checked. A value the recipe
   leaves open is shown, so you can judge it yourself.
-- **Layers** lists every layer Staunch unwrapped, with what it learned from
-  each. A layer it does not know is listed as "unknown".
+- **Standard layers** lists Chia's standard wrappers Staunch recognised (CAT2,
+  singleton v1_1, standard wallet), with what it learned from each, such as a
+  token's asset id.
 - **Build** says how many compiles ran and how many different programs they
   gave. "Stable" is what you want to see.
 
@@ -80,7 +85,7 @@ Build: 16 compiles, one program (stable)
 | MATCH | The code and every pinned value are what the recipe says | Nothing. Read the source, or have it audited, knowing it is what runs |
 | MATCH (code only) | The code is right; the recipe pins no values | Look at the curried values listed. Are they the ones you expect? |
 | NO MATCH, different values | Right code, but a value differs (named in the report) | Find out why. A different asset id, owner or setting may be a different contract |
-| NO MATCH | This coin is not running the recipe's code | Don't rely on that source for this coin. Check you have the right recipe and coin |
+| NO MATCH | The recipe's code is nowhere in this coin's puzzle | Don't rely on that source for this coin. Check you have the right recipe and coin |
 
 Add `--json` for the same report as JSON, for scripts and services.
 

@@ -41,7 +41,7 @@ def test_verify_a_spent_coin_through_the_node(tmp_path, capsys):
     code = main(["verify", str(CHIA / "cat_v2.recipe.json"), "--coin", "ab" * 32, "--chia", chia,
                  "-n", str(TIMES), "--json"])
     out = json.loads(capsys.readouterr().out)
-    assert code == 0 and out["result"] == "code-match" and out["layer"] == "CAT2"
+    assert code == 0 and out["result"] == "code-match" and out["found_at"] == "the whole puzzle"
 
 
 def test_an_unspent_coin_falls_back_to_its_hash(tmp_path, capsys):
@@ -83,5 +83,5 @@ def test_the_human_report_reads_clearly(capsys):
     assert main(["verify", str(CHIA / "cat_v2.recipe.json"), "--puzzle", reveal, "-n", str(TIMES)]) == 0
     out = capsys.readouterr().out
     assert out.startswith("MATCH (code only): Chia CAT v2")
-    assert "Code found at layer 1 of 2: CAT2" in out
+    assert "Code found in: the whole puzzle" in out
     assert "Build: 4 compiles, one program (stable)" in out

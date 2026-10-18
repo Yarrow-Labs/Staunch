@@ -19,18 +19,22 @@ what it trusts, what it cannot tell you, and where each step lives in the code.
 4. **Get the target** (`staunch/fetch.py`, or the command line). A revealed
    puzzle in hex, a coin from a node, or a bare puzzle hash. A node's answer is
    checked: the revealed puzzle must hash to the coin's puzzle hash.
-5. **Peel** (`staunch/layers.py`). Unwrap Chia's standard layers, outermost
-   first, recognised by mod hash: CAT2, singleton v1_1, standard wallet. Stop at
-   the first layer that is not one of these and call it "unknown".
-6. **Compare** (`verify.verify_puzzle`, `verify.verify_hash`). For every layer and
-   every variant:
-   - the layer's hash equals the mod hash: the code, with nothing curried; or
-   - the layer is curried (exactly the standard shape) and its mod hashes to
+5. **Search** (`verify._places`). Starting with the whole puzzle, go
+   breadth-first through every program curried into it: uncurry a place, and
+   queue each curried value that is a pair. This finds the code at any depth,
+   inside any wrapper, without needing to know the wrapper. The search stops
+   after `MAX_PLACES` (10,000) places, with a warning. Separately, `layers.peel`
+   recognises Chia's standard layers (CAT2, singleton v1_1, standard wallet) for
+   the report, and `layers.NAMES` names known puzzles along the way.
+6. **Compare** (`verify._compare_place`). For every place and every variant:
+   - the place's hash equals the mod hash: the code, with nothing curried; or
+   - the place is curried (exactly the standard shape) and its mod hashes to
      the mod hash: the code; then each curried value's tree hash is compared
      with the recipe's.
 
-   The strongest result wins. A bare hash is compared with the mod hash, and
-   with the mod hash curried with the recipe's values when it pins them all.
+   The strongest result wins; of equal results, the shallowest. A bare hash
+   cannot be searched: it is compared with the mod hash, and with the mod hash
+   curried with the recipe's values when the recipe pins them all.
 
 ## Why every comparison is by tree hash
 
@@ -46,8 +50,10 @@ its parts, which `tests/test_program.py` checks against hashing the full program
   source you trust. If the compiler were wrong, Staunch's rebuild would be too.
 - **The `clvm` package**, for parsing serialized programs.
 - **git**, for the commit check.
-- **Its own layer table**: three mod hashes in `layers.py`.
-  `tests/test_layers.py` rebuilds each from Chia's published source and checks it.
+- **Its own tables** in `layers.py`: the three standard layers it peels and the
+  puzzles it names. `tests/test_layers.py` rebuilds each from Chia's published
+  source. A wrong table would mislabel a report; it cannot cause a false match,
+  because matching compares against the recipe's own rebuild only.
 
 It does **not** trust the node (step 4), the recipe (step 1 and 2), or the
 puzzle (it is only hashed and taken apart, never run).
@@ -56,8 +62,11 @@ puzzle (it is only hashed and taken apart, never run).
 
 - **Whether the code is safe.** A MATCH says the source is what runs, nothing
   about whether the source is correct.
-- **Anything about an unknown layer's insides.** If the project's puzzle wraps
-  another puzzle that is not a standard layer, check that one with its own recipe.
+- **What the wrappers around the code do.** Staunch says where the code was
+  found; the puzzles around it need their own recipes to be checked.
+- **Code that is not curried in.** The search follows curried values. Code
+  passed in a solution at spend time is not part of the puzzle, so it is not
+  searched.
 - **Values the recipe leaves open.** They are shown, not judged.
 - **Rare compiler variants.** N compiles find a variant that appears half the
   time almost surely, but not one that appears once in a thousand. Raise `-n`
@@ -71,8 +80,8 @@ puzzle (it is only hashed and taken apart, never run).
 | `staunch/program.py` | ~150 | Parse, hash, curry and uncurry CLVM values. Everything else rests on this; read it first |
 | `staunch/recipe.py` | ~150 | Parse and check a recipe |
 | `staunch/build.py` | ~90 | Compile in fresh processes; collect variants |
-| `staunch/layers.py` | ~70 | The standard layer table and `peel` |
-| `staunch/verify.py` | ~200 | Preflight, rebuild, compare; the `Result` and `Report` types |
+| `staunch/layers.py` | ~85 | The standard layers, `peel`, and the names used in reports |
+| `staunch/verify.py` | ~240 | Preflight, rebuild, search, compare; the `Result` and `Report` types |
 | `staunch/fetch.py` | ~50 | Read a coin from a full node through `chia rpc` |
 | `staunch/cli.py` | ~130 | The command line and the printed report |
 
@@ -84,7 +93,7 @@ Chia's own source in `tests/fixtures/chia_puzzles`:
 |---|---|
 | `test_program.py` | Hashing against Chia's known values, integer encoding, curry and uncurry, and the shapes `uncurry` must refuse |
 | `test_layers.py` | The layer table rebuilt from Chia's source; peeling real coins; a look-alike that must not peel |
-| `test_verify.py` | Matches on real coins; controls for a changed source byte, puzzle byte, value, compiler or commit; hashes; precurry; unstable sources; recipe errors |
+| `test_verify.py` | Matches on real coins, including an NFT's layers and a plot NFT; controls for a changed source byte, puzzle byte, value, compiler or commit; which match wins; the search bound; hashes; precurry; unstable sources; recipe errors |
 | `test_cli.py` | The command line, `--coin` through a stand-in node, including one whose answer is wrong |
 
 ## The compiler findings behind the design

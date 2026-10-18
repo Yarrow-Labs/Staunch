@@ -41,3 +41,13 @@ def test_a_look_alike_with_the_wrong_argument_count_is_not_peeled():
     mod, args = program.uncurry(reveal("cat_std"))
     fake = program.curry(mod, args[:2])
     assert [l.name for l in layers.peel(fake)] == ["unknown"]
+
+
+@pytest.mark.parametrize("source, name", [
+    ("singleton_top_layer.clsp", "singleton v1 (older)"),
+    ("nft_puzzles/nft_state_layer.clsp", "NFT state layer"),
+    ("nft_puzzles/nft_ownership_layer.clsp", "NFT ownership layer"),
+])
+def test_each_name_in_the_table_rebuilds_from_chia_source(source, name):
+    code = build.compile_once(CHIA / source, [CHIA])
+    assert layers.name_of(program.tree_hash(program.from_bytes(code))) == name

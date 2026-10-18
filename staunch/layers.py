@@ -20,6 +20,22 @@ CAT_V2 = bytes.fromhex("37bef360ee858133b69d595a906dc45d01af50379dad515eb9518abb
 SINGLETON_V1_1 = bytes.fromhex("7faa3253bfddd1e0decb0906b2dc6247bbc4cf608f58345d173adb63e8b47c9f")
 STANDARD_WALLET = bytes.fromhex("e9aaa49f45bad5c889b86ee3341550c155cfdd10c3a6757de618d20612fffd52")
 
+# Chia puzzles that are named in reports when the search passes through them.
+# Naming only: they are not peeled, and nothing depends on this list being complete.
+NAMES = {
+    CAT_V2: "CAT2",
+    SINGLETON_V1_1: "singleton v1_1",
+    STANDARD_WALLET: "standard wallet",
+    bytes.fromhex("24e044101e57b3d8c908b8a38ad57848afd29d3eecc439dba45f4412df4954fd"): "singleton v1 (older)",
+    bytes.fromhex("a04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2"): "NFT state layer",
+    bytes.fromhex("c5abea79afaa001b5427dfa0c8cf42ca6f38f5841b78f9b3c252733eb2de2726"): "NFT ownership layer",
+}
+
+
+def name_of(mod_hash: bytes) -> str:
+    """A Chia puzzle's name, or its mod hash shortened."""
+    return NAMES.get(mod_hash, f"puzzle {mod_hash.hex()[:12]}…")
+
 
 @dataclass(eq=False)   # layers are compared by identity, never by value
 class Layer:

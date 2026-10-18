@@ -6,9 +6,12 @@ The steps, in order:
    compiler version, wrong commit, uncommitted changes, missing files).
 2. `rebuild`: compile the source many times; each distinct program is a
    *variant*. Its *mod hash* is its tree hash, after any `precurry` values.
-3. `verify_puzzle`: peel the puzzle's standard layers, then compare every
-   layer with every variant, and keep the best answer.
-   `verify_hash`: the same, for a bare puzzle hash, which cannot be peeled.
+3. `verify_puzzle`: search the puzzle for the recipe's code. The search starts
+   with the whole puzzle and goes breadth-first through every program curried
+   into it, so it finds the code at any depth, inside wrappers Staunch has never
+   heard of. Every place is compared with every variant; the best answer wins,
+   and of equal answers the shallowest.
+   `verify_hash`: the same, for a bare puzzle hash, which cannot be searched.
 
 Every comparison is by tree hash, so a value known only by its hash checks
 exactly like one given in full.
@@ -22,13 +25,13 @@ from enum import IntEnum
 from clvm import SExp
 
 from . import build, program
-from .layers import Layer, peel
+from .layers import Layer, name_of, peel
 from .recipe import Recipe, RecipeError
 
 
 class Result(IntEnum):
     """The answer, from worst to best. A higher value is a stronger match."""
-    NO_MATCH = 0        # not the recipe's code
+    NO_MATCH = 0        # the recipe's code is nowhere in the puzzle
     VALUES_DIFFER = 1   # the recipe's code, with different curried values
     CODE_MATCH = 2      # the recipe's code; the recipe pins no values to check
     MATCH = 3           # the recipe's code, with every value the recipe pins
@@ -58,8 +61,8 @@ class Report:
     recipe: str
     build: Build
     result: Result = Result.NO_MATCH
-    layers: list[Layer] = field(default_factory=list)   # empty when checking a bare hash
-    layer: Layer | None = None       # the layer that matched
+    layers: list[Layer] = field(default_factory=list)   # standard layers; empty for a bare hash
+    location: list[str] | None = None   # where the code was found: [] is the whole puzzle
     variant: int | None = None       # index of the variant that matched
     details: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -68,7 +71,7 @@ class Report:
         return {
             "recipe": self.recipe,
             "result": self.result.label,
-            "layer": self.layer.name if self.layer else None,
+            "found_at": None if self.location is None else (" > ".join(self.location) or "the whole puzzle"),
             "variant": self.variant,
             "details": self.details,
             "warnings": self.warnings,
@@ -157,28 +160,59 @@ def _compare_values(recipe: Recipe, values: list[SExp]) -> tuple[Result, list[st
     return (Result.VALUES_DIFFER if differ else Result.MATCH), details
 
 
-def _compare_layer(recipe: Recipe, layer: Layer, mod_hash: bytes) -> tuple[Result, list[str]]:
-    if layer.hash == mod_hash:                        # the code, with nothing curried
+def _compare_place(recipe: Recipe, place: SExp, mod_hash: bytes) -> tuple[Result, list[str]]:
+    """Is `place` the code with mod hash `mod_hash`, and with which values?"""
+    if program.tree_hash(place) == mod_hash:          # the code, with nothing curried
         if recipe.curry:
             return Result.VALUES_DIFFER, ["the code matches, with nothing curried; the recipe expects values"]
         return (Result.CODE_MATCH if recipe.curry is None else Result.MATCH), ["the code matches, with nothing curried"]
-    curried = program.uncurry(layer.puzzle)
+    curried = program.uncurry(place)
     if curried and program.tree_hash(curried[0]) == mod_hash:
         return _compare_values(recipe, curried[1])
     return Result.NO_MATCH, []
 
 
+MAX_PLACES = 10_000   # bounds the search on a pathological puzzle
+
+
+def _places(puzzle: SExp):
+    """Every program in `puzzle` that could be the recipe's code, shallowest first.
+
+    Yields (program, location). The location names each step down, for example
+    ["singleton v1_1, curried value 1", "NFT state layer, curried value 3"].
+    Only curried values that are themselves programs (pairs) are entered: an
+    atom cannot be a puzzle's code.
+    """
+    queue = [(puzzle, [])]
+    for here, location in queue:            # the list grows as we go: breadth-first
+        yield here, location
+        curried = program.uncurry(here)
+        if curried is None:
+            continue
+        mod_name = name_of(program.tree_hash(curried[0]))
+        for index, value in enumerate(curried[1]):
+            if value.listp():
+                queue.append((value, location + [f"{mod_name}, curried value {index}"]))
+
+
 def verify_puzzle(recipe: Recipe, puzzle: SExp, times: int = 16) -> Report:
-    """Check a revealed puzzle against the recipe, layer by layer."""
+    """Search a revealed puzzle for the recipe's code, at any depth."""
     built = rebuild(recipe, times)
     report = Report(recipe.name, built, layers=peel(puzzle), warnings=list(built.warnings))
-    for layer in report.layers:                              # outermost first
-        for index, mod_hash in enumerate(built.mod_hashes):  # most common first
-            result, details = _compare_layer(recipe, layer, mod_hash)
+    searched = 0
+    for place, location in _places(puzzle):
+        searched += 1
+        if searched > MAX_PLACES:
+            report.warnings.append(f"the search stopped after {MAX_PLACES} places; a match deeper in was not looked for")
+            break
+        for index, mod_hash in enumerate(built.mod_hashes):   # most common variant first
+            result, details = _compare_place(recipe, place, mod_hash)
             if result > report.result:
-                report.result, report.layer, report.variant, report.details = result, layer, index, details
+                report.result, report.location, report.variant, report.details = result, location, index, details
+        if report.result == Result.MATCH:
+            break                                               # nothing can beat it
     if report.result == Result.NO_MATCH:
-        report.details.append("no layer of the puzzle is this code")
+        report.details.append(f"the recipe's code is not anywhere in this puzzle ({searched} places searched)")
     elif report.variant:
         report.warnings.append(f"the match is with variant {report.variant + 1}, not the most common build")
     return report
