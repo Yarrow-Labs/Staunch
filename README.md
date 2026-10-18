@@ -55,12 +55,12 @@ beside their source.
 
 ## The four answers
 
-| Answer | Meaning | Exit code |
-|---|---|---|
-| **MATCH** | The recipe's code, with every value the recipe pins | 0 |
-| **MATCH (code only)** | The recipe's code; the recipe pins no values, so none were checked | 0 |
-| **NO MATCH**, different values | The recipe's code, but a curried value differs; each one is named | 1 |
-| **NO MATCH** | The recipe's code is nowhere in the puzzle | 1 |
+| Answer | Meaning | `--json` | Exit code |
+|---|---|---|---|
+| **MATCH** | The recipe's code, with every value the recipe pins | `match` | 0 |
+| **MATCH (code only)** | The recipe's code; the recipe pins no values, so none were checked | `code-match` | 0 |
+| **NO MATCH**, different values | The recipe's code, but a curried value differs; each one is named | `values-differ` | 1 |
+| **NO MATCH** | The recipe's code is nowhere in the puzzle | `no-match` | 1 |
 
 Staunch exits 2 when it refuses to run, for example with the wrong compiler
 version or a checkout at the wrong commit. It never guesses.
@@ -80,7 +80,8 @@ version or a checkout at the wrong commit. It never guesses.
   holds just a hash of it.
 - **Puzzles come in layers.** An NFT is a singleton around a state layer around
   an ownership layer around a royalty program, each with values baked in.
-  Staunch searches every layer, including wrappers it has never seen.
+  Staunch searches every layer, including wrappers it has never seen, and
+  code whose values were curried in more than one step.
 - **The compiler is not always deterministic.** It can turn one source into
   more than one program. Staunch compiles each source many times and reports
   every result it gets.
@@ -91,10 +92,12 @@ version or a checkout at the wrong commit. It never guesses.
 ## Status
 
 Version 0.1. Tested on 115 puzzles from Chia, TibetSwap and warp.green, and on
-live mainnet coins of 23 of them. See [CHANGELOG.md](CHANGELOG.md).
+live mainnet coins of 32 of them. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Licence
 
 Apache-2.0. `tests/fixtures/chia_puzzles` holds unmodified files from
 [Chia-Network/chia_puzzles](https://github.com/Chia-Network/chia_puzzles),
-also Apache-2.0. Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).
+also Apache-2.0, and `tests/fixtures/warp_green` unmodified files from
+[warpdotgreen/cli](https://github.com/warpdotgreen/cli), under the MIT licence.
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md).

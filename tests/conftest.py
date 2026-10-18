@@ -9,6 +9,7 @@ from staunch import program
 FIXTURES = Path(__file__).parent / "fixtures"
 CHIA = FIXTURES / "chia_puzzles"
 MAINNET = FIXTURES / "mainnet"
+WARP = FIXTURES / "warp_green"
 TIMES = 4   # compiles per check in tests; the default of 16 is for real use
 
 

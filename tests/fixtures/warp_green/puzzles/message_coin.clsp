@@ -1,0 +1,58 @@
+; message_coin.clsp by yakuhito
+;; used to record messages from Ethereum - can be spent by the intended receiver (puzzle or singleton)
+
+(mod (
+    ; first curry (automated)
+    PORTAL_RECEIVER_SINGLETON_STRUCT
+
+    ; second curry
+    (SOURCE_CHAIN . NONCE)
+    SOURCE
+    DESTINATION ; destination
+    MESSAGE_HASH
+
+    (receiver_parent_info . receiver_amount) ; receiver_proof
+    parent_proof ; (parent_parent_info . parent_inner_puzzle_hash)
+    my_coin_id
+  )
+
+  (include condition_codes.clib)
+  (include curry.clib)
+  (include sha256tree.clib)
+
+  (defun main (
+    PORTAL_RECEIVER_SINGLETON_STRUCT
+    (parent_parent_info . parent_inner_puzzle_hash)
+    my_coin_id
+    receiver_coin_id
+  )
+    (list
+      (list ASSERT_MY_COIN_ID my_coin_id)
+      (list ASSERT_MY_PARENT_ID (sha256
+        parent_parent_info
+        (curry_hashes_inline (f PORTAL_RECEIVER_SINGLETON_STRUCT)
+          (sha256tree PORTAL_RECEIVER_SINGLETON_STRUCT)
+          parent_inner_puzzle_hash
+        )
+        1 ; parent amount
+      ))
+      (list CREATE_COIN_ANNOUNCEMENT receiver_coin_id) ; puzzle contains message info
+      (list ASSERT_COIN_ANNOUNCEMENT (sha256 receiver_coin_id my_coin_id))
+    ) 
+  )
+
+  (defun-inline value_b32_or_x (v)
+    (if (= (strlen v) 32) v (x))
+  )
+
+  (main
+    PORTAL_RECEIVER_SINGLETON_STRUCT
+    parent_proof
+    my_coin_id
+    (sha256
+      (value_b32_or_x receiver_parent_info)
+      (value_b32_or_x DESTINATION)
+      receiver_amount
+    ) ; receiver_coin_id
+  )
+)

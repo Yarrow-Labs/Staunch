@@ -1,5 +1,7 @@
 import pytest
 from clvm import SExp
+from clvm.operators import OPERATOR_LOOKUP
+from clvm.run_program import run_program
 
 from staunch import program
 
@@ -43,6 +45,26 @@ def test_uncurry_takes_off_one_curry_only():
     got_mod, got_args = program.uncurry(outer)
     assert program.tree_hash(got_mod) == program.tree_hash(inner)
     assert [a.as_atom() for a in got_args] == [b"\x02"]
+
+
+def test_uncurry_steps_reads_every_step():
+    code = SExp.to(b"\x07")
+    inner = program.curry(code, [SExp.to(1)])
+    outer = program.curry(inner, [SExp.to(2), SExp.to(3)])
+    got = [(program.tree_hash(c), [v.as_atom() for v in vs]) for c, vs in program.uncurry_steps(outer)]
+    assert got == [(program.tree_hash(outer), []),
+                   (program.tree_hash(inner), [b"\x02", b"\x03"]),
+                   (program.tree_hash(code), [b"\x01", b"\x02", b"\x03"])]
+
+
+def test_code_curried_in_steps_runs_as_if_curried_once():
+    """Why `uncurry_steps` lists values in that order: the code receives them so."""
+    lists_its_first_four_arguments = SExp.to([4, 2, [4, 5, [4, 11, [4, 23, 0]]]])
+    two_steps = program.curry(program.curry(lists_its_first_four_arguments, [SExp.to(1)]), [SExp.to(2)])
+    one_step = program.curry(lists_its_first_four_arguments, [SExp.to(1), SExp.to(2)])
+    solution = SExp.to([3, 4])
+    got = [run_program(p, solution, OPERATOR_LOOKUP)[1] for p in (two_steps, one_step)]
+    assert got[0] == got[1] == SExp.to([1, 2, 3, 4])
 
 
 @pytest.mark.parametrize("not_curried", [

@@ -1,0 +1,8 @@
+{
+  "staunch": 1,
+  "name": "warp.green burn inner puzzle",
+  "source": "puzzles/wrapped_assets/burn_inner_puzzle.clsp",
+  "include": ["include"],
+  "compiler": "clvm_tools_rs 0.4.0",
+  "repo": "https://github.com/warpdotgreen/cli"
+}

@@ -1,0 +1,47 @@
+(
+  (defun verify_validator_sigs_step (
+    treshold
+    sigs_until_now
+    validator_pks
+    validator_sigs_switch
+    sig_data
+    conditions_until_now
+  )
+    (if (r validator_pks)
+      (verify_validator_sigs_step
+        treshold
+        (+ sigs_until_now (r (divmod validator_sigs_switch 2)))
+        (r validator_pks)
+        (f (divmod validator_sigs_switch 2))
+        sig_data
+        (if (= (r (divmod validator_sigs_switch 2)) ()) conditions_until_now
+          (c
+            (list 50 (f validator_pks) sig_data) ; AGG_SIG_ME
+            conditions_until_now
+          )
+        )
+      )
+      ; else
+      (if (> treshold sigs_until_now) (x) conditions_until_now)
+    )
+  )
+
+  ; validator_sigs_switch is a number - each bit represents a validator
+  ;; so, for example, 0b1011 means that the 1st, 2nd, and 4th validators have signed
+  ;; (yes, you gotta read it backwards)
+  (defun-inline verify_validator_sigs (
+    validator_info ; (treshold . pks)
+    validator_sigs_switch
+    sig_data
+    conditions_until_now
+  )
+    (verify_validator_sigs_step
+      (f validator_info)
+      0
+      (r validator_info)
+      validator_sigs_switch
+      sig_data
+      conditions_until_now
+    )
+  )
+)

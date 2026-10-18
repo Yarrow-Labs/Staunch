@@ -22,19 +22,34 @@ what it trusts, what it cannot tell you, and where each step lives in the code.
 5. **Search** (`verify._places`). Starting with the whole puzzle, go
    breadth-first through every program curried into it: uncurry a place, and
    queue each curried value that is a pair. This finds the code at any depth,
-   inside any wrapper, without needing to know the wrapper. The search stops
+   inside any wrapper, without needing to know the wrapper. A program curried
+   in steps, `curry(curry(CODE, A), B)`, is read at every step
+   (`program.uncurry_steps`): as itself, as `curry(CODE, A)` with B, and as
+   CODE with A then B, which is the order CODE receives them. Values from every
+   step are queued, each named by the step it came from. The search stops
    after `MAX_PLACES` (10,000) places, with a warning. Separately, `layers.peel`
    recognises Chia's standard layers (CAT2, singleton v1_1, standard wallet) for
    the report, and `layers.NAMES` names known puzzles along the way.
 6. **Compare** (`verify._compare_place`). For every place and every variant:
    - the place's hash equals the mod hash: the code, with nothing curried; or
-   - the place is curried (exactly the standard shape) and its mod hashes to
-     the mod hash: the code; then each curried value's tree hash is compared
-     with the recipe's.
+   - one of the place's curry steps, read from the outside in, leaves a
+     program that hashes to the mod hash: the code; then each value curried on
+     top of it, from every step, in order, is compared by tree hash with the
+     recipe's. With `precurry`, the mod hash already includes the inner step, so
+     only the values on top of it are compared.
 
    The strongest result wins; of equal results, the shallowest. A bare hash
    cannot be searched: it is compared with the mod hash, and with the mod hash
    curried with the recipe's values when the recipe pins them all.
+
+## Why the search also enters compiled code
+
+The compiler's output for a program with functions has the same shape as a
+curry: the program's body, with its functions "curried" in. Staunch cannot tell
+the two apart from the bytes, and does not try, so the search also reads a
+program's own compiled functions as values. That costs a little time and
+changes nothing else: a match needs a program that hashes to the recipe's
+rebuild, and a recipe's rebuild includes its own functions.
 
 ## Why every comparison is by tree hash
 
@@ -71,29 +86,36 @@ puzzle (it is only hashed and taken apart, never run).
 - **Rare compiler variants.** N compiles find a variant that appears half the
   time almost surely, but not one that appears once in a thousand. Raise `-n`
   for a deeper check.
-- **What a hash wraps.** A bare puzzle hash cannot be unwrapped.
+- **What a hash wraps.** A bare puzzle hash cannot be unwrapped. A hash check
+  also assumes the recipe's `curry` values were curried in one step on top of
+  the mod hash; for a puzzle curried in more steps, put the inner steps'
+  values in `precurry`.
+- **Code in a spend's solution**, such as a CAT's TAIL, which is revealed only
+  when it runs. Cut it out and check it with `--puzzle-file`; it is the coin's
+  TAIL if its tree hash is the coin's asset id.
 
 ## Reading the code
 
 | File | Lines | What it does |
 |---|---|---|
-| `staunch/program.py` | ~150 | Parse, hash, curry and uncurry CLVM values. Everything else rests on this; read it first |
+| `staunch/program.py` | ~180 | Parse, hash, curry and uncurry CLVM values. Everything else rests on this; read it first |
 | `staunch/recipe.py` | ~150 | Parse and check a recipe |
 | `staunch/build.py` | ~90 | Compile in fresh processes; collect variants |
 | `staunch/layers.py` | ~85 | The standard layers, `peel`, and the names used in reports |
-| `staunch/verify.py` | ~240 | Preflight, rebuild, search, compare; the `Result` and `Report` types |
+| `staunch/verify.py` | ~260 | Preflight, rebuild, search, compare; the `Result` and `Report` types |
 | `staunch/fetch.py` | ~50 | Read a coin from a full node through `chia rpc` |
 | `staunch/cli.py` | ~130 | The command line and the printed report |
 
 The tests (`tests/`) pair every check with a control that must fail. They run
-offline against real mainnet puzzles saved in `tests/fixtures/mainnet`, and
-Chia's own source in `tests/fixtures/chia_puzzles`:
+offline against real mainnet puzzles saved in `tests/fixtures/mainnet`,
+Chia's own source in `tests/fixtures/chia_puzzles`, and three of warp.green's
+puzzles, which are curried in two steps, in `tests/fixtures/warp_green`:
 
 | Test file | Covers |
 |---|---|
-| `test_program.py` | Hashing against Chia's known values, integer encoding, curry and uncurry, and the shapes `uncurry` must refuse |
+| `test_program.py` | Hashing against Chia's known values, integer encoding, curry and uncurry, the shapes `uncurry` must refuse, and that code curried in steps runs as if curried once |
 | `test_layers.py` | The layer table rebuilt from Chia's source; peeling real coins; a look-alike that must not peel |
-| `test_verify.py` | Matches on real coins, including an NFT's layers and a plot NFT; controls for a changed source byte, puzzle byte, value, compiler or commit; which match wins; the search bound; hashes; precurry; unstable sources; recipe errors |
+| `test_verify.py` | Matches on real coins, including an NFT's layers and a plot NFT; controls for a changed source byte, puzzle byte, value, compiler or commit; which match wins; the search bound; code curried in steps, including warp.green's on mainnet; hashes; precurry; unstable sources; recipe errors |
 | `test_cli.py` | The command line, `--coin` through a stand-in node, including one whose answer is wrong |
 
 ## The compiler findings behind the design

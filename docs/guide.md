@@ -70,7 +70,8 @@ Build: 16 compiles, one program (stable)
   curried value 3`: inside the singleton's value 1, then inside the state
   layer's value 3. Staunch searches every program curried into the coin, so it
   finds the code inside wrappers it has never heard of; those are shown by mod
-  hash.
+  hash. It also finds code curried in more than one step, and then says so:
+  the values are listed in the order the code receives them.
 - **Curried values** are values baked into the code, such as a token's asset id
   or an owner's key. Each one the recipe pins is checked. A value the recipe
   leaves open is shown, so you can judge it yourself.
@@ -87,7 +88,21 @@ Build: 16 compiles, one program (stable)
 | NO MATCH, different values | Right code, but a value differs (named in the report) | Find out why. A different asset id, owner or setting may be a different contract |
 | NO MATCH | The recipe's code is nowhere in this coin's puzzle | Don't rely on that source for this coin. Check you have the right recipe and coin |
 
-Add `--json` for the same report as JSON, for scripts and services.
+Add `--json` for the same report as JSON, for scripts and services. The exit
+code is the same as without it.
+
+| Field | Holds |
+|---|---|
+| `recipe` | The recipe's name |
+| `result` | `match`, `code-match`, `values-differ` or `no-match` (the four answers above, in order) |
+| `found_at` | Where the code was found, as printed; `null` if it was not found or a hash was checked |
+| `variant` | Which build variant matched, counting from 0; `null` if none |
+| `details` | The lines printed under the answer, such as each curried value |
+| `warnings` | The warnings printed at the end |
+| `layers` | The standard layers, outermost first: `name`, `hash` and what was learned from each |
+| `variants` | Each program the compiles gave: `mod_hash`, `compiles` (how many gave it) and `of` (how many ran) |
+
+A refusal (exit code 2) prints `Refused:` and its reason, not JSON.
 
 ## 4. When Staunch refuses
 

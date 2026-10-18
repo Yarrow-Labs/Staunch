@@ -62,7 +62,9 @@ Staunch uses.
 ## 3. Curried values
 
 Most deployed puzzles have values curried in: an owner's key, a token's asset
-id, a fee rate. List them in `curry`, in order. Each value is one of:
+id, a fee rate. List them in `curry`, in the order your code receives them.
+If your deployment curries in steps (some values first, more on top later),
+list them all, first step first. Each value is one of:
 
 | Form | Use it for | Example |
 |---|---|---|
@@ -84,7 +86,7 @@ How to choose:
   this checks exactly as well.
 - A puzzle hash can only be checked against a recipe that pins every value. If
   you want unspent coins to be checkable, publish a recipe per deployment that
-  pins them all.
+  pins them all. If you curry in steps, also see section 4.
 
 Example: a CAT of one token, with any owner:
 
@@ -103,8 +105,14 @@ a vault may curry in the hashes of the contracts it works with, then publish
 *that* as "the vault mod", and deployments curry the rest on top. On chain that
 is two curries, one inside the other.
 
-List the inner values in `precurry` and the outer ones in `curry`. Without
-`precurry`, comparing your bare code against such a puzzle always says no match.
+List the inner values in `precurry` and the outer ones in `curry`. Then
+`staunch build` prints your published mod hash, and `verify` compares the outer
+values only.
+
+You can also leave `precurry` out and list every value in `curry`, inner ones
+first: a revealed puzzle checks the same either way. The difference is a bare
+puzzle hash, which Staunch can only rebuild one curry step on top of the mod
+hash, so it needs the inner values in `precurry`.
 
 ## 5. If your source compiles more than one way
 

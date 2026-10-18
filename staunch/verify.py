@@ -9,8 +9,9 @@ The steps, in order:
 3. `verify_puzzle`: search the puzzle for the recipe's code. The search starts
    with the whole puzzle and goes breadth-first through every program curried
    into it, so it finds the code at any depth, inside wrappers Staunch has never
-   heard of. Every place is compared with every variant; the best answer wins,
-   and of equal answers the shallowest.
+   heard of. A program curried in several steps is read with every step, so
+   code curried twice is found too. Every place is compared with every
+   variant; the best answer wins, and of equal answers the shallowest.
    `verify_hash`: the same, for a bare puzzle hash, which cannot be searched.
 
 Every comparison is by tree hash, so a value known only by its hash checks
@@ -160,15 +161,25 @@ def _compare_values(recipe: Recipe, values: list[SExp]) -> tuple[Result, list[st
     return (Result.VALUES_DIFFER if differ else Result.MATCH), details
 
 
-def _compare_place(recipe: Recipe, place: SExp, mod_hash: bytes) -> tuple[Result, list[str]]:
-    """Is `place` the code with mod hash `mod_hash`, and with which values?"""
-    if program.tree_hash(place) == mod_hash:          # the code, with nothing curried
-        if recipe.curry:
-            return Result.VALUES_DIFFER, ["the code matches, with nothing curried; the recipe expects values"]
-        return (Result.CODE_MATCH if recipe.curry is None else Result.MATCH), ["the code matches, with nothing curried"]
-    curried = program.uncurry(place)
-    if curried and program.tree_hash(curried[0]) == mod_hash:
-        return _compare_values(recipe, curried[1])
+def _compare_place(recipe: Recipe, readings: list[tuple[bytes, list[SExp]]],
+                   mod_hash: bytes) -> tuple[Result, list[str]]:
+    """Is this place the code with mod hash `mod_hash`, and with which values?
+
+    `readings` are the place's `program.uncurry_steps`, each with its code's tree
+    hash: the place itself, then one curry step removed, then two, and so on.
+    """
+    for steps, (code_hash, values) in enumerate(readings):
+        if code_hash != mod_hash:
+            continue
+        if steps == 0:                                  # the code, with nothing curried
+            if recipe.curry:
+                return Result.VALUES_DIFFER, ["the code matches, with nothing curried; the recipe expects values"]
+            return (Result.CODE_MATCH if recipe.curry is None else Result.MATCH), ["the code matches, with nothing curried"]
+        result, details = _compare_values(recipe, values)
+        if steps > 1:
+            details.insert(0, f"the values were curried in {steps} steps; "
+                              "they are numbered in the order the code receives them")
+        return result, details
     return Result.NO_MATCH, []
 
 
@@ -178,21 +189,23 @@ MAX_PLACES = 10_000   # bounds the search on a pathological puzzle
 def _places(puzzle: SExp):
     """Every program in `puzzle` that could be the recipe's code, shallowest first.
 
-    Yields (program, location). The location names each step down, for example
+    Yields (location, readings): `readings` are the program's
+    `program.uncurry_steps`, each with its code's tree hash. The location names
+    each step down, for example
     ["singleton v1_1, curried value 1", "NFT state layer, curried value 3"].
-    Only curried values that are themselves programs (pairs) are entered: an
+    Every curried value that is itself a program (a pair) is entered, from every
+    curry step, outermost step first, and is named by the step it came from; an
     atom cannot be a puzzle's code.
     """
     queue = [(puzzle, [])]
     for here, location in queue:            # the list grows as we go: breadth-first
-        yield here, location
-        curried = program.uncurry(here)
-        if curried is None:
-            continue
-        mod_name = name_of(program.tree_hash(curried[0]))
-        for index, value in enumerate(curried[1]):
-            if value.listp():
-                queue.append((value, location + [f"{mod_name}, curried value {index}"]))
+        readings = [(program.tree_hash(code), values) for code, values in program.uncurry_steps(here)]
+        yield location, readings
+        for (code_hash, values), (_, outer_values) in zip(readings[1:], readings):
+            step = values[:len(values) - len(outer_values)]     # the values this step added
+            for index, value in enumerate(step):
+                if value.listp():
+                    queue.append((value, location + [f"{name_of(code_hash)}, curried value {index}"]))
 
 
 def verify_puzzle(recipe: Recipe, puzzle: SExp, times: int = 16) -> Report:
@@ -200,13 +213,13 @@ def verify_puzzle(recipe: Recipe, puzzle: SExp, times: int = 16) -> Report:
     built = rebuild(recipe, times)
     report = Report(recipe.name, built, layers=peel(puzzle), warnings=list(built.warnings))
     searched = 0
-    for place, location in _places(puzzle):
+    for location, readings in _places(puzzle):
         searched += 1
         if searched > MAX_PLACES:
             report.warnings.append(f"the search stopped after {MAX_PLACES} places; a match deeper in was not looked for")
             break
         for index, mod_hash in enumerate(built.mod_hashes):   # most common variant first
-            result, details = _compare_place(recipe, place, mod_hash)
+            result, details = _compare_place(recipe, readings, mod_hash)
             if result > report.result:
                 report.result, report.location, report.variant, report.details = result, location, index, details
         if report.result == Result.MATCH:

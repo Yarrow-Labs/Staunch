@@ -4,7 +4,7 @@ import subprocess
 import pytest
 from clvm import SExp
 
-from conftest import CHIA, TIMES, reveal, write_recipe
+from conftest import CHIA, TIMES, WARP, reveal, write_recipe
 from staunch import build, layers, program, verify
 from staunch.recipe import RecipeError, load
 from staunch.verify import Result
@@ -187,19 +187,70 @@ def test_a_wrapped_hash_cannot_be_unwrapped_and_says_so():
     assert "cannot be unwrapped" in report.details[0]
 
 
-# --- precurried mods ------------------------------------------------------
+# --- code curried in steps -------------------------------------------------
 
-def test_a_precurried_mod_needs_its_precurry(chia_copy):
-    """Code curried once to make a published 'mod', then curried again."""
+def wallet_code() -> SExp:
     r = load(CHIA / "standard_wallet.recipe.json")
-    code = program.from_bytes(build.compile_once(r.source, r.include))
-    baked, value = SExp.to(b"\x11" * 32), SExp.to(b"\x22" * 48)
-    puzzle = program.curry(program.curry(code, [baked]), [value])
-    without = verify.verify_puzzle(r, puzzle, TIMES)
-    assert without.result == Result.NO_MATCH
-    r2 = load(write_recipe(chia_copy, "standard_wallet",
-                           precurry=[{"bytes": "11" * 32}], curry=[{"bytes": "22" * 48}]))
-    assert verify.verify_puzzle(r2, puzzle, TIMES).result == Result.MATCH
+    return program.from_bytes(build.compile_once(r.source, r.include))
+
+
+def in_two_steps() -> SExp:
+    """The wallet code curried with one value, then with another on top."""
+    return program.curry(program.curry(wallet_code(), [SExp.to(b"\x11" * 32)]), [SExp.to(b"\x22" * 48)])
+
+
+def test_code_curried_in_two_steps_is_found():
+    report = verify.verify_puzzle(load(CHIA / "standard_wallet.recipe.json"), in_two_steps(), TIMES)
+    assert report.result == Result.CODE_MATCH
+    assert report.location == []
+    assert "2 steps" in report.details[0]
+    assert len(report.details) == 3                     # the note, then both values in order
+
+
+def test_values_from_every_step_are_checked_in_order(chia_copy):
+    r = load(write_recipe(chia_copy, "standard_wallet", curry=[{"bytes": "11" * 32}, {"bytes": "22" * 48}]))
+    assert verify.verify_puzzle(r, in_two_steps(), TIMES).result == Result.MATCH
+
+
+def test_control_values_from_two_steps_in_the_wrong_order(chia_copy):
+    r = load(write_recipe(chia_copy, "standard_wallet", curry=[{"bytes": "22" * 48}, {"bytes": "11" * 32}]))
+    assert verify.verify_puzzle(r, in_two_steps(), TIMES).result == Result.VALUES_DIFFER
+
+
+def test_three_steps_inside_a_wrapper(chia_copy):
+    three = program.curry(in_two_steps(), [SExp.to(b"\x33")])
+    puzzle = program.curry(SExp.to([b"\x01", b"\x09"]), [three])
+    r = load(write_recipe(chia_copy, "standard_wallet",
+                          curry=[{"bytes": "11" * 32}, {"bytes": "22" * 48}, {"bytes": "33"}]))
+    report = verify.verify_puzzle(r, puzzle, TIMES)
+    assert report.result == Result.MATCH
+    assert len(report.location) == 1 and "3 steps" in report.details[0]
+
+
+def test_a_precurried_mod_takes_the_outer_values_only(chia_copy):
+    """A published mod with values baked in: `precurry` names them, `curry` the rest."""
+    r = load(write_recipe(chia_copy, "standard_wallet",
+                          precurry=[{"bytes": "11" * 32}], curry=[{"bytes": "22" * 48}]))
+    report = verify.verify_puzzle(r, in_two_steps(), TIMES)
+    assert report.result == Result.MATCH
+    assert len(report.details) == 1                     # one step on top of the published mod
+
+
+def test_control_a_wrong_precurry_is_not_the_code(chia_copy):
+    r = load(write_recipe(chia_copy, "standard_wallet", precurry=[{"bytes": "99" * 32}]))
+    assert verify.verify_puzzle(r, in_two_steps(), TIMES).result == Result.NO_MATCH
+
+
+@pytest.mark.parametrize("recipe, coin, location", [
+    ("portal_receiver", "warp_portal", ["singleton v1_1, curried value 1"]),
+    ("message_coin", "warp_message_coin", []),
+    ("burn_inner_puzzle", "warp_burn", ["CAT2, curried value 2"]),
+])
+def test_warp_green_puzzles_curried_in_two_steps_on_mainnet(recipe, coin, location):
+    report = verify.verify_puzzle(load(WARP / f"{recipe}.recipe.json"), reveal(coin), TIMES)
+    assert report.result == Result.CODE_MATCH
+    assert report.location == location
+    assert "2 steps" in report.details[0]
 
 
 # --- an unstable source -------------------------------------------------

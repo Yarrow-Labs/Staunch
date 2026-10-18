@@ -143,7 +143,8 @@ def uncurry(sexp: SExp) -> tuple[SExp, list[SExp]] | None:
 
     Strict on purpose: anything that is not the standard shape, down to the
     last terminator, is not treated as curried. Only the outermost curry is
-    removed, so a program curried twice comes back as (once-curried MOD, values).
+    removed, so a program curried twice comes back as (once-curried MOD, values);
+    `uncurry_steps` removes them all.
     """
     outer = _three_items(sexp)
     if outer is None or not _atom_is(outer[0], OP_APPLY):
@@ -162,3 +163,17 @@ def uncurry(sexp: SExp) -> tuple[SExp, list[SExp]] | None:
         values.append(value)
         env = link[2]
     return mod, values
+
+
+def uncurry_steps(sexp: SExp) -> list[tuple[SExp, list[SExp]]]:
+    """Every way to read `sexp` as code with values curried in, outermost first.
+
+    A program can be curried in steps: curry(curry(CODE, A), B). It runs CODE
+    with A's values and then B's, exactly as curry(CODE, A + B) would, so it is
+    read three ways: (sexp, []), (curry(CODE, A), B) and (CODE, A + B).
+    """
+    readings, values = [(sexp, [])], []
+    while (curried := uncurry(sexp)) is not None:
+        sexp, values = curried[0], curried[1] + values
+        readings.append((sexp, values))
+    return readings
