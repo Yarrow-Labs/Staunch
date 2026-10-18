@@ -1,0 +1,8 @@
+{
+  "staunch": 1,
+  "name": "Chia pool member (plot NFT)",
+  "source": "pool_puzzles/pool_member_innerpuz.clsp",
+  "include": ["."],
+  "compiler": "clvm_tools_rs 0.4.0",
+  "repo": "https://github.com/Chia-Network/chia_puzzles"
+}
