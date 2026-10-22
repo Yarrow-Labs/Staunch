@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "staunch"
 version = "0.1.0"
 description = "Check that a Chialisp contract's published source is the code on chain"
+authors = [{ name = "Yarrow Labs" }]
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.10"
