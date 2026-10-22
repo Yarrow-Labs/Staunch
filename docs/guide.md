@@ -134,7 +134,7 @@ follow a recipe exactly. It never guesses its way round a problem.
 
 ```
 staunch build  RECIPE [--root DIR] [-n N] [--strict]
-staunch verify RECIPE [--root DIR] [-n N] [--strict] [--json] [--chia PATH]
+staunch verify RECIPE [--root DIR] [-n N] [--strict] [--json] [--chia PATH] [--max-puzzle-bytes N]
                (--puzzle HEX | --puzzle-file FILE | --coin COIN_ID | --hash PUZZLE_HASH)
 ```
 
@@ -143,5 +143,8 @@ staunch verify RECIPE [--root DIR] [-n N] [--strict] [--json] [--chia PATH]
 - `-n N`: compiles per check. Default 16. More finds rarer variants and takes
   longer.
 - `--strict`: exit 3 if the source compiles more than one way.
+- `--max-puzzle-bytes N`: refuse a puzzle longer than N bytes (exit 2). Default
+  65,536; the largest real puzzle we have tested is under 5,000. Applies to
+  `--puzzle`, `--puzzle-file` and `--coin`.
 
 Exit codes: 0 match · 1 no match · 2 refused · 3 unstable (with `--strict`).

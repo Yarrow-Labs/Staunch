@@ -89,3 +89,16 @@ def test_from_bytes_refuses_trailing_bytes():
     assert program.tree_hash(program.from_bytes(blob)) == program.tree_hash(SExp.to([1, 2]))
     with pytest.raises(ValueError):
         program.from_bytes(blob + b"\x80")
+
+
+def test_a_puzzle_over_the_limit_is_refused():
+    blob = program.to_bytes(SExp.to([1, 2, 3]))
+    assert program.from_bytes(blob, max_bytes=len(blob)) == program.from_bytes(blob)
+    with pytest.raises(ValueError, match="the limit is"):
+        program.from_bytes(blob, max_bytes=len(blob) - 1)
+    with pytest.raises(ValueError, match="the limit is"):
+        program.from_hex(blob.hex(), max_bytes=len(blob) - 1)
+
+
+def test_no_limit_unless_one_is_given():
+    assert program.from_bytes(program.to_bytes(SExp.to(list(range(1, 30000)))))   # far past the default

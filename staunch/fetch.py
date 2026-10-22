@@ -31,11 +31,11 @@ def _rpc(chia: str, command: str, args: dict) -> dict:
     return reply
 
 
-def coin(coin_id: str, chia: str = "chia") -> tuple[SExp | None, bytes]:
+def coin(coin_id: str, chia: str = "chia", max_bytes: int = program.MAX_PUZZLE_BYTES) -> tuple[SExp | None, bytes]:
     """(the revealed puzzle, or None if the coin is unspent; its puzzle hash).
 
     The node is not trusted: a reveal that does not hash to the coin's puzzle
-    hash is refused.
+    hash is refused, and so is one longer than `max_bytes`.
     """
     if len(bytes.fromhex(coin_id.removeprefix("0x"))) != 32:
         raise FetchError("a coin id is 32 bytes (64 hex digits)")
@@ -46,7 +46,7 @@ def coin(coin_id: str, chia: str = "chia") -> tuple[SExp | None, bytes]:
         return None, puzzle_hash
     spend = _rpc(chia, "get_puzzle_and_solution",
                  {"coin_id": coin_id, "height": record["spent_block_index"]})["coin_solution"]
-    puzzle = program.from_hex(spend["puzzle_reveal"])
+    puzzle = program.from_hex(spend["puzzle_reveal"], max_bytes)
     if program.tree_hash(puzzle) != puzzle_hash:
         raise FetchError("the node's puzzle reveal does not hash to the coin's puzzle hash")
     return puzzle, puzzle_hash

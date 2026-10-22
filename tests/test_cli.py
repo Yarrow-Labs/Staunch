@@ -85,3 +85,20 @@ def test_the_human_report_reads_clearly(capsys):
     assert out.startswith("MATCH (code only): Chia CAT v2")
     assert "Code found in: the whole puzzle" in out
     assert "Build: 4 compiles, one program (stable)" in out
+
+
+def test_control_a_puzzle_over_the_limit_is_refused_and_the_limit_can_be_raised(capsys):
+    reveal = json.loads((MAINNET / "std.json").read_text())["puzzle_reveal"]
+    size = len(bytes.fromhex(reveal.removeprefix("0x")))
+    recipe = str(CHIA / "standard_wallet.recipe.json")
+    assert main(["verify", recipe, "--puzzle", reveal, "--max-puzzle-bytes", str(size - 1)]) == 2
+    assert "the limit is" in capsys.readouterr().err
+    assert main(["verify", recipe, "--puzzle", reveal, "--max-puzzle-bytes", str(size), "-n", str(TIMES)]) in (0, 1)
+    assert "Refused" not in capsys.readouterr().err
+
+
+def test_control_a_node_reveal_over_the_limit_is_refused(tmp_path, capsys):
+    chia = fake_chia(tmp_path, fixture("cat_std"))
+    assert main(["verify", str(CHIA / "cat_v2.recipe.json"), "--coin", "ab" * 32, "--chia", chia,
+                 "--max-puzzle-bytes", "100"]) == 2
+    assert "the limit is" in capsys.readouterr().err

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1 (2026-10-22)
+
+- A puzzle read from `--puzzle`, `--puzzle-file` or a node is refused if it is
+  longer than 64 KiB (exit 2), because parsing a huge puzzle takes seconds and
+  the largest real one we have is under 5 KB. `--max-puzzle-bytes N` raises or
+  lowers the limit. Programs Staunch compiles itself are not limited.
+- Releases are published to PyPI from a version tag by GitHub Actions.
+
 ## 0.1.0 (2026-10-18)
 
 First release.

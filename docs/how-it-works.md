@@ -18,7 +18,10 @@ what it trusts, what it cannot tell you, and where each step lives in the code.
    Its *mod hash* is its tree hash, with any `precurry` values curried in.
 4. **Get the target** (`staunch/fetch.py`, or the command line). A revealed
    puzzle in hex, a coin from a node, or a bare puzzle hash. A node's answer is
-   checked: the revealed puzzle must hash to the coin's puzzle hash.
+   checked: the revealed puzzle must hash to the coin's puzzle hash. A puzzle
+   longer than `program.MAX_PUZZLE_BYTES` (64 KiB, `--max-puzzle-bytes`) is
+   refused before it is parsed, since the parser takes seconds on a huge one.
+   The limit applies to input from outside only, never to code Staunch compiles.
 5. **Search** (`verify._places`). Starting with the whole puzzle, go
    breadth-first through every program curried into it: uncurry a place, and
    queue each curried value that is a pair. This finds the code at any depth,

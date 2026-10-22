@@ -71,7 +71,7 @@ def cmd_build(args) -> int:
 def cmd_verify(args) -> int:
     recipe = load(args.recipe, args.root)
     if args.coin:
-        puzzle, puzzle_hash = fetch.coin(args.coin, args.chia)
+        puzzle, puzzle_hash = fetch.coin(args.coin, args.chia, args.max_puzzle_bytes)
         if puzzle is None:
             report = verify_hash(recipe, puzzle_hash, args.n)
             report.warnings.append("the coin is unspent, so only its puzzle hash is public")
@@ -81,7 +81,7 @@ def cmd_verify(args) -> int:
         report = verify_hash(recipe, _parse_hash(args.hash), args.n)
     else:
         text = Path(args.puzzle_file).read_text() if args.puzzle_file else args.puzzle
-        report = verify_puzzle(recipe, program.from_hex(text), args.n)
+        report = verify_puzzle(recipe, program.from_hex(text, args.max_puzzle_bytes), args.n)
 
     if args.json:
         print(json.dumps(report.as_dict(), indent=2))
@@ -112,6 +112,8 @@ def parser() -> argparse.ArgumentParser:
     target.add_argument("--coin", metavar="COIN_ID", help="a coin id (needs a synced full node and the chia command)")
     target.add_argument("--hash", metavar="PUZZLE_HASH", help="a puzzle hash")
     v.add_argument("--chia", default="chia", metavar="PATH", help="the chia command to use with --coin (default: chia)")
+    v.add_argument("--max-puzzle-bytes", type=int, default=program.MAX_PUZZLE_BYTES, metavar="N",
+                   help=f"refuse a puzzle longer than N bytes (default {program.MAX_PUZZLE_BYTES:,})")
     v.add_argument("--json", action="store_true", help="print the report as JSON")
     return top
 

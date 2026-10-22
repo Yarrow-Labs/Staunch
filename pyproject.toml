@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "staunch"
-version = "0.1.0"
+version = "0.1.1"
 description = "Check that a Chialisp contract's published source is the code on chain"
 authors = [{ name = "Yarrow Labs" }]
 readme = "README.md"

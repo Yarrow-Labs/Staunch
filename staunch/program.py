@@ -30,8 +30,18 @@ SOLUTION = b"\x01"   # in an environment, atom 1 stands for "the whole solution"
 
 # --- reading and writing ------------------------------------------------------
 
-def from_bytes(blob: bytes) -> SExp:
-    """Parse a serialized CLVM value. Refuses trailing bytes."""
+# The largest puzzle read from outside (the command line, a file, a node) unless
+# the user raises it. The clvm parser takes about 30 microseconds a byte, so a
+# huge puzzle would stall Staunch for no reason: the largest real one we have
+# is 4,972 bytes (an NFT).
+MAX_PUZZLE_BYTES = 64 * 1024
+
+
+def from_bytes(blob: bytes, max_bytes: int | None = None) -> SExp:
+    """Parse a serialized CLVM value. Refuses trailing bytes, and more than `max_bytes` if given."""
+    if max_bytes is not None and len(blob) > max_bytes:
+        raise ValueError(f"the puzzle is {len(blob):,} bytes; the limit is {max_bytes:,}. "
+                         "Raise it with --max-puzzle-bytes if this is the puzzle you meant")
     stream = io.BytesIO(blob)
     sexp = sexp_from_stream(stream, SExp.to)
     if stream.read(1):
@@ -39,9 +49,9 @@ def from_bytes(blob: bytes) -> SExp:
     return sexp
 
 
-def from_hex(text: str) -> SExp:
+def from_hex(text: str, max_bytes: int | None = None) -> SExp:
     """Parse a serialized CLVM value written in hex, with or without 0x."""
-    return from_bytes(bytes.fromhex(text.strip().removeprefix("0x")))
+    return from_bytes(bytes.fromhex(text.strip().removeprefix("0x")), max_bytes)
 
 
 def to_bytes(sexp: SExp) -> bytes:
